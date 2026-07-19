@@ -28,9 +28,7 @@ specials board, and true dim-lighting. Flagged for Tom.
 |---|---|---|
 | km-sushi-sashimi | IMG_3433 | sashimi and premium sashimi, rotated, glare |
 | km-sushi-nigiri | IMG_3434 | nigiri and basic rolls, dense, rotated, glare |
-| km-sushi-special-rolls-1 | IMG_3435 | photo-grid specialty rolls, printed ingredients |
-| km-sushi-special-rolls-2 | IMG_3436 | photo-grid specialty rolls (overlaps -1) |
-| km-sushi-special-rolls-3 | IMG_3437 | tempura/fried/no-rice/vegetarian rolls |
+| km-sushi-special-rolls | IMG_3435, IMG_3436, IMG_3437 | photo-grid specialty rolls; 3-photo merge, 3435/3436 overlap exercises dedupe |
 | km-sushi-cold-appetizer | IMG_3440 | cold appetizers, rotated |
 | km-sushi-hot-appetizer-salad | IMG_3441 | hot appetizers and salads, rotated |
 | km-sushi-noodles-kitchen | IMG_3442 | soup, noodles, katsu, rice bowls (non-sushi) |
@@ -38,11 +36,11 @@ specials board, and true dim-lighting. Flagged for Tom.
 | km-sushi-dinner | IMG_3444 | dinner specials and entrees |
 | kuu-sushi-happy-hour | IMG_3439, IMG_3438 | clean 2-photo happy-hour menu |
 
-## Labeling conventions (draft, to be reconciled with shared/prompts/system.md)
+## Labeling conventions (LOCKED, must be mirrored in shared/prompts/system.md)
 
-Goldens must share the ingredient conventions the extraction prompt will use, or
-ingredient F1 is meaningless. These are the draft rules; the same rules go into
-system.md (T-1.3) so predictions and goldens align:
+Locked by Tom on 2026-07-18. Goldens share the ingredient conventions the
+extraction prompt will use, or ingredient F1 is meaningless. The same rules go
+into system.md (T-1.3) so predictions and goldens align:
 
 - **ingredients**: lowercase, singular, substantive fillings only (fish,
   shellfish, vegetables, sauces, cheese). Compound preparations stay whole
@@ -51,26 +49,26 @@ system.md (T-1.3) so predictions and goldens align:
   `nori`, `soy_paper`, `rice_paper`, `none`, `unknown`. Nigiri and sashimi are
   `none`; standard rolls are `nori` unless the menu says otherwise.
 - **rice is not listed** as an ingredient. It is the assumed base for nigiri
-  and rolls, and listing it everywhere adds noise without signal. (Open
-  decision for Tom: keep rice out, or list it. Whatever we pick, system.md and
-  every golden must match.)
+  and rolls, and listing it everywhere adds noise without signal.
 - **is_raw**: `true` if the item contains raw fish (includes seared tuna, which
   is raw at the center), `false` for fully cooked items, `null` when not
   determinable.
 - **price / price_text**: `price` is the parsed number; `price_text` is the
   verbatim string. Market price is `price: null`, `price_text: "MP"`. Items
   priced only as a combo keep the combo price.
+- **restaurant_name**: `null` unless the name is literally printed in that menu's
+  photos. Never infer it from the folder name or context. On multi-photo menus
+  the merge takes the first non-null name in photo order (see docs/SPEC.md).
+- **beverages excluded**: standalone drinks (sake, beer, cocktails) are not
+  labeled; food and sushi items only.
 - **ingredients for items whose components are not printed** (e.g. a plain
   "California Roll" with no description) are labeled from standard sushi
-  knowledge. These are the labels most likely to need Tom's correction.
+  knowledge and flagged in each item's `notes`. These are the labels most likely
+  to need Tom's correction.
 
 ## Status
 
-Drafted and ready for review (3 menus, ~101 items):
-`km-sushi-sashimi` (12), `km-sushi-nigiri` (41), `kuu-sushi-happy-hour` (48).
-
-Organized, golden pending: the seven other KM pages. They have no `golden.json`
-yet, so the harness does not score them until drafted. The specialty-roll pages
-(`special-rolls-1/2/3`) print per-roll ingredients in fine text under glare on
-rotated photos; drafting those reliably needs a zoomed crop pass (or Tom's
-transcription), not a single-glance read, so they are held rather than guessed.
+Nine eval menus, all with hand-labeled goldens. The three specialty-roll pages
+are combined into one multi-photo menu (`km-sushi-special-rolls`) to exercise the
+merge and dedupe guard; the rest are one menu per page. Tom reviews every golden;
+corrections land as follow-up commits.
