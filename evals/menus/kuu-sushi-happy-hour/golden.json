@@ -82,12 +82,11 @@
       "price": 7.99,
       "ingredients": [
         "chicken",
-        "yakisoba noodle",
-        "vegetable"
+        "yakisoba noodle"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "INFERRED ingredients"
+      "notes": "INFERRED ingredients; various vegetables not itemized"
     },
     {
       "n": 7,
@@ -590,12 +589,11 @@
         "crab",
         "avocado",
         "cucumber",
-        "steak",
-        "vegetable"
+        "steak"
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "sauteed steak and vegetables on top"
+      "notes": "sauteed steak and vegetables on top; various vegetables not itemized"
     },
     {
       "n": 44,

@@ -3,7 +3,7 @@
   "source_photos": [
     "IMG_3441"
   ],
-  "notes": "KM Sushi menu; restaurant name not printed on this page. smelt roe normalized to masago, katsuo bushi to bonito flake.",
+  "notes": "KUU SUSHI menu; restaurant name not printed on this page. smelt roe normalized to masago, bonito flake to katsuo bushi.",
   "items": [
     {
       "n": 1,
@@ -69,12 +69,12 @@
       "price": 6.99,
       "ingredients": [
         "tofu",
-        "bonito flake",
+        "katsuo bushi",
         "ponzu"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "HA5; 4 pcs deep fried tofu; katsuo bushi = bonito flake"
+      "notes": "HA5; 4 pcs deep fried tofu; bonito flake = katsuo bushi"
     },
     {
       "n": 6,
@@ -91,7 +91,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "HA6; deep fried"
+      "notes": "HA6; deep fried; 2 shrimp, 1 zucchini, 1 yellow onion, 2 green beans, 1 yam"
     },
     {
       "n": 7,
@@ -107,7 +107,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "HA7; deep fried"
+      "notes": "HA7; deep fried; 2 yam, 4 green beans, 2 zucchini, 2 yellow onion"
     },
     {
       "n": 8,
@@ -242,7 +242,6 @@
         "cucumber",
         "masago",
         "seaweed",
-        "assorted sashimi",
         "house dressing"
       ],
       "wrap": "none",
@@ -261,7 +260,6 @@
         "masago",
         "seaweed",
         "tuna",
-        "japanese vegetable",
         "house dressing"
       ],
       "wrap": "none",

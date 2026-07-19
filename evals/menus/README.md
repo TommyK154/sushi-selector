@@ -79,3 +79,10 @@ Nine eval menus, all with hand-labeled goldens. The three specialty-roll pages
 are combined into one multi-photo menu (`km-sushi-special-rolls`) to exercise the
 merge and dedupe guard; the rest are one menu per page. Tom reviews every golden;
 corrections land as follow-up commits.
+
+Human-review snapshot (2026-07-19):
+
+- REVIEWED: `km-sushi-nigiri`, `kuu-sushi-happy-hour`, `km-sushi-dinner`,
+  `km-sushi-cold-appetizer`
+- PENDING REVIEW: `km-sushi-sashimi`, `km-sushi-special-rolls`,
+  `km-sushi-hot-appetizer-salad`, `km-sushi-noodles-kitchen`, `km-sushi-lunch`

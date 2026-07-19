@@ -11,9 +11,7 @@
       "section": "Dinner Special",
       "price_text": "26.99",
       "price": 26.99,
-      "ingredients": [
-        "assorted sashimi"
-      ],
+      "ingredients": [],
       "wrap": "none",
       "is_raw": true,
       "notes": "8 kinds assorted sashimi over seasoned rice; fish not itemized"
@@ -33,11 +31,15 @@
         "escolar",
         "shrimp",
         "masago",
-        "egg"
+        "tamago",
+        "crab meat",
+        "avocado",
+        "cucumber",
+        "spicy tuna"
       ],
       "wrap": "none",
       "is_raw": true,
-      "notes": "plus california roll or spicy tuna roll; smelt roe=masago, tamago=egg"
+      "notes": "plus california roll or spicy tuna roll; smelt roe=masago, tamago=egg; INFERRED roll ingredients included"
     },
     {
       "n": 3,
@@ -50,11 +52,15 @@
         "salmon",
         "yellowtail",
         "albacore",
-        "shrimp"
+        "shrimp",
+        "crab meat",
+        "avocado",
+        "cucumber",
+        "spicy tuna"
       ],
       "wrap": "none",
       "is_raw": true,
-      "notes": "sashimi 2 tuna, 2 salmon, 2 albacore; plus california roll or spicy tuna roll"
+      "notes": "sushi 1 tuna, 1 salmon, 1 yellowtail, 1 albacore, 1 shrimp; sashimi 2 tuna, 2 salmon, 2 albacore; plus california roll or spicy tuna roll; INFERRED roll ingredients included"
     },
     {
       "n": 4,
@@ -103,12 +109,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "garlic",
-        "vegetable"
+        "garlic"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D4; grilled chicken breast, garlic sauce"
+      "notes": "D4; grilled chicken breast, garlic sauce, various unspecified vegetables"
     },
     {
       "n": 8,
@@ -118,12 +123,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "spicy sauce",
-        "vegetable"
+        "spicy sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D5; grilled chicken breast"
+      "notes": "D5; grilled chicken breast, various unspecified vegetables"
     },
     {
       "n": 9,
@@ -147,12 +151,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "house special sauce",
-        "vegetable"
+        "house special sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D7; crispy deep fried chicken leg, stir fried"
+      "notes": "D7; crispy deep fried chicken leg, stir fried, various unspecified vegetables"
     },
     {
       "n": 11,
@@ -162,12 +165,11 @@
       "price": null,
       "ingredients": [
         "shrimp",
-        "lemon sauce",
-        "vegetable"
+        "lemon sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D8; 8 pcs white shrimp, sauteed"
+      "notes": "D8; 8 pcs white shrimp, sauteed, various unspecified vegetables"
     },
     {
       "n": 12,
@@ -197,7 +199,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D10; deep fried"
+      "notes": "D10; deep fried; 2 shrimp, 1 yam, 1 zucchini, 2 onion, 4 green beans"
     },
     {
       "n": 14,
@@ -213,7 +215,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "D11; deep fried"
+      "notes": "D11; deep fried; 2 onion, 2 zucchini, 4 green beans, 2 yam"
     },
     {
       "n": 15,

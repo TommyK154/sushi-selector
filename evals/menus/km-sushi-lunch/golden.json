@@ -1,9 +1,9 @@
 {
-  "restaurant_name": "KM Sushi",
+  "restaurant_name": "KUU SUSHI",
   "source_photos": [
     "IMG_3443"
   ],
-  "notes": "Restaurant name printed (KM Sushi logo on page). Lunch entrees L1-L15 are choose-2-for-17.50 options, so each carries price null with price_text noting the combo price and any upcharge. Regular-roll choices listed under the specials are options, not standalone items, so they are not itemized.",
+  "notes": "Restaurant name printed (KUU SUSHI logo on page). Lunch entrees L1-L15 are choose-2-for-17.50 options, so each carries price null with price_text noting the combo price and any upcharge. Regular-roll choices listed under the specials are options, not standalone items, so they are not itemized.",
   "items": [
     {
       "n": 1,
@@ -11,9 +11,7 @@
       "section": "Lunch Special",
       "price_text": "18.99",
       "price": 18.99,
-      "ingredients": [
-        "assorted sashimi"
-      ],
+      "ingredients": [],
       "wrap": "none",
       "is_raw": true,
       "notes": "8 kinds assorted sashimi over seasoned rice; fish not itemized"
@@ -109,12 +107,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "garlic",
-        "vegetable"
+        "garlic"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "L4; grilled, garlic sauce"
+      "notes": "L4; grilled, garlic sauce; various vegetables not itemized"
     },
     {
       "n": 9,
@@ -124,12 +121,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "spicy sauce",
-        "vegetable"
+        "spicy sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "L5; grilled"
+      "notes": "L5; grilled; various vegetables not itemized"
     },
     {
       "n": 10,
@@ -153,12 +149,11 @@
       "price": null,
       "ingredients": [
         "chicken",
-        "house special sauce",
-        "vegetable"
+        "house special sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "L7; crispy deep fried, stir fried"
+      "notes": "L7; crispy deep fried, stir fried; various vegetables not itemized"
     },
     {
       "n": 12,
@@ -168,12 +163,11 @@
       "price": null,
       "ingredients": [
         "shrimp",
-        "lemon sauce",
-        "vegetable"
+        "lemon sauce"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "L8; 6 pcs white shrimp, sauteed"
+      "notes": "L8; 6 pcs white shrimp, sauteed; various vegetables not itemized"
     },
     {
       "n": 13,

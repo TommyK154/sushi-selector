@@ -43,12 +43,11 @@
       "price": 13.99,
       "ingredients": [
         "udon noodle",
-        "vegetable",
         "soy sauce broth"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "N3"
+      "notes": "N3; various vegetables not itemized"
     },
     {
       "n": 4,
@@ -123,12 +122,11 @@
       "price_text": "14.45 / 15.45",
       "price": null,
       "ingredients": [
-        "yakisoba noodle",
-        "vegetable"
+        "yakisoba noodle"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price)"
+      "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price); various vegetables not itemized"
     },
     {
       "n": 9,
