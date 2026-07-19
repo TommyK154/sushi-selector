@@ -83,6 +83,6 @@ corrections land as follow-up commits.
 Human-review snapshot (2026-07-19):
 
 - REVIEWED: `km-sushi-nigiri`, `kuu-sushi-happy-hour`, `km-sushi-dinner`,
-  `km-sushi-cold-appetizer`
+  `km-sushi-cold-appetizer`, `km-sushi-lunch`
 - PENDING REVIEW: `km-sushi-sashimi`, `km-sushi-special-rolls`,
-  `km-sushi-hot-appetizer-salad`, `km-sushi-noodles-kitchen`, `km-sushi-lunch`
+  `km-sushi-hot-appetizer-salad`, `km-sushi-noodles-kitchen`

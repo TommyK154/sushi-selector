@@ -3,7 +3,7 @@
   "source_photos": [
     "IMG_3442"
   ],
-  "notes": "KM Sushi menu; restaurant name not printed on this page. All items cooked. Rice excluded from ingredients per convention (rice bowls keep their toppings only).",
+  "notes": "KUU SUSHI menu; restaurant name not printed on this page. All items cooked. Rice excluded from ingredients per convention (rice bowls keep their toppings only).",
   "items": [
     {
       "n": 1,
@@ -81,7 +81,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "N5; mixed tempura in broth"
+      "notes": "N5; mixed tempura in broth; 2 shrimp, 1 yam, 1 zucchini, 1 yellow onion, 2 green bean"
     },
     {
       "n": 6,
@@ -107,13 +107,12 @@
       "price": 15.5,
       "ingredients": [
         "ramen noodle",
-        "seafood",
         "green mussel",
         "spicy broth"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "N7; spicy korean ramen, 2 pcs green mussel"
+      "notes": "N7; spicy korean ramen, 2 pcs green mussel; various seafood not itemized"
     },
     {
       "n": 8,

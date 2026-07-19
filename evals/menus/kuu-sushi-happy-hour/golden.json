@@ -355,7 +355,7 @@
       ],
       "wrap": "nori",
       "is_raw": true,
-      "notes": "combo: 4 pc california + 4 pc spicy tuna; INFERRED fillings"
+      "notes": "combo: 4 pc california + 4 pc spicy tuna; INFERRED ingredients"
     },
     {
       "n": 27,
@@ -370,7 +370,7 @@
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "INFERRED fillings"
+      "notes": "INFERRED ingredients"
     },
     {
       "n": 28,
@@ -397,7 +397,7 @@
       ],
       "wrap": "nori",
       "is_raw": true,
-      "notes": "menu spelling 'Philadephia'; INFERRED fillings"
+      "notes": "menu spelling 'Philadephia'; INFERRED ingredients"
     },
     {
       "n": 30,
@@ -461,7 +461,7 @@
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "INFERRED fillings"
+      "notes": "INFERRED ingredients"
     },
     {
       "n": 35,

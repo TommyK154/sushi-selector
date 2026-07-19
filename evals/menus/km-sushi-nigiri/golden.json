@@ -357,7 +357,7 @@
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "cooked; INFERRED fillings, price uncertain (glare)"
+      "notes": "cooked; INFERRED ingredients, price uncertain (glare)"
     },
     {
       "n": 29,
@@ -372,7 +372,7 @@
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "INFERRED fillings"
+      "notes": "INFERRED ingredients"
     },
     {
       "n": 30,
@@ -411,7 +411,7 @@
       ],
       "wrap": "nori",
       "is_raw": true,
-      "notes": "INFERRED fillings; salmon may be smoked (cooked)"
+      "notes": "INFERRED ingredients; salmon may be smoked (cooked)"
     },
     {
       "n": 33,
@@ -513,7 +513,7 @@
       ],
       "wrap": "nori",
       "is_raw": false,
-      "notes": "INFERRED fillings"
+      "notes": "INFERRED ingredients"
     },
     {
       "n": 41,
