@@ -38,13 +38,20 @@ specials board, and true dim-lighting. Flagged for Tom.
 
 ## Labeling conventions (LOCKED, must be mirrored in shared/prompts/system.md)
 
-Locked by Tom on 2026-07-18. Goldens share the ingredient conventions the
-extraction prompt will use, or ingredient F1 is meaningless. The same rules go
-into system.md (T-1.3) so predictions and goldens align:
+Locked by Tom on 2026-07-18 (crab and masago/tobiko rules added 2026-07-19).
+Goldens share the ingredient conventions the extraction prompt will use, or
+ingredient F1 is meaningless. The same rules go into system.md (T-1.3) so
+predictions and goldens align:
 
 - **ingredients**: lowercase, singular, substantive fillings only (fish,
   shellfish, vegetables, sauces, cheese). Compound preparations stay whole
-  ("spicy tuna" is one ingredient, "imitation crab" is one).
+  ("spicy tuna" is one ingredient, "stick crab" is one).
+- **canonical form is the sushi-menu term, not the English translation**. Use
+  `masago` (not "smelt roe") and `tobiko` (not "flying fish roe"). The alias
+  table (shared/aliases.json) maps English -> the menu term, never the reverse.
+- **crab is never normalized to imitation crab**. "Crab" and "crab meat" stay as
+  written; only a literal "krab" or "imitation crab" on the menu maps to
+  `imitation crab`.
 - **wrap is its own field**, so the wrapper is never an ingredient. Values:
   `nori`, `soy_paper`, `rice_paper`, `none`, `unknown`. Nigiri and sashimi are
   `none`; standard rolls are `nori` unless the menu says otherwise.
@@ -63,8 +70,8 @@ into system.md (T-1.3) so predictions and goldens align:
   labeled; food and sushi items only.
 - **ingredients for items whose components are not printed** (e.g. a plain
   "California Roll" with no description) are labeled from standard sushi
-  knowledge and flagged in each item's `notes`. These are the labels most likely
-  to need Tom's correction.
+  knowledge and must carry the literal token `INFERRED` in that item's `notes`.
+  These are the labels most likely to need Tom's correction.
 
 ## Status
 

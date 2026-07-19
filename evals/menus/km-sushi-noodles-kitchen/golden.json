@@ -1,25 +1,240 @@
 {
   "restaurant_name": null,
-  "source_photos": ["IMG_3442"],
+  "source_photos": [
+    "IMG_3442"
+  ],
   "notes": "KM Sushi menu; restaurant name not printed on this page. All items cooked. Rice excluded from ingredients per convention (rice bowls keep their toppings only).",
   "items": [
-    { "n": 1, "name": "Miso Soup", "section": "Soup & Noodles", "price_text": "2.95", "price": 2.95, "ingredients": ["miso", "tofu", "seaweed"], "wrap": "none", "is_raw": false, "notes": "N1" },
-    { "n": 2, "name": "Chicken Udon", "section": "Soup & Noodles", "price_text": "13.99", "price": 13.99, "ingredients": ["udon noodle", "chicken", "soy sauce broth"], "wrap": "none", "is_raw": false, "notes": "N2" },
-    { "n": 3, "name": "Vegetable Udon", "section": "Soup & Noodles", "price_text": "13.99", "price": 13.99, "ingredients": ["udon noodle", "vegetable", "soy sauce broth"], "wrap": "none", "is_raw": false, "notes": "N3" },
-    { "n": 4, "name": "Spicy Beef Udon", "section": "Soup & Noodles", "price_text": "14.95", "price": 14.95, "ingredients": ["udon noodle", "beef", "spicy broth"], "wrap": "none", "is_raw": false, "notes": "N4" },
-    { "n": 5, "name": "Tempura Udon", "section": "Soup & Noodles", "price_text": "16.50", "price": 16.50, "ingredients": ["udon noodle", "shrimp", "yam", "zucchini", "yellow onion", "green bean", "soy sauce broth"], "wrap": "none", "is_raw": false, "notes": "N5; mixed tempura in broth" },
-    { "n": 6, "name": "Donkotsu Ramen", "section": "Soup & Noodles", "price_text": "16.50", "price": 16.50, "ingredients": ["ramen noodle", "pork", "egg", "pork broth"], "wrap": "none", "is_raw": false, "notes": "N6; menu spelling 'Donkotsu' (tonkotsu); cha-shu pork, boiled egg" },
-    { "n": 7, "name": "Spicy Seafood Ramen", "section": "Soup & Noodles", "price_text": "15.50", "price": 15.50, "ingredients": ["ramen noodle", "seafood", "green mussel", "spicy broth"], "wrap": "none", "is_raw": false, "notes": "N7; spicy korean ramen, 2 pcs green mussel" },
-    { "n": 8, "name": "Yakisoba", "section": "Soup & Noodles", "price_text": "14.45 / 15.45", "price": null, "ingredients": ["yakisoba noodle", "vegetable"], "wrap": "none", "is_raw": false, "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price)" },
-
-    { "n": 9, "name": "Children's Combo", "section": "Children's Combo", "price_text": "14.50", "price": 14.50, "ingredients": [], "wrap": "none", "is_raw": false, "notes": "choose 2: chicken teriyaki, steak teriyaki, sesame chicken, mixed tempura, gyoza (4 pcs)" },
-
-    { "n": 10, "name": "Chicken Katsu", "section": "Katsu", "price_text": "17.99", "price": 17.99, "ingredients": ["chicken", "panko", "katsu sauce"], "wrap": "none", "is_raw": false, "notes": "listed as 'Chicken' under Katsu; served with rice, soup, salad" },
-    { "n": 11, "name": "Pork Katsu", "section": "Katsu", "price_text": "19.99", "price": 19.99, "ingredients": ["pork", "panko", "katsu sauce"], "wrap": "none", "is_raw": false, "notes": "listed as 'Pork' under Katsu; pork tender loin" },
-
-    { "n": 12, "name": "Chicken Teriyaki", "section": "Rice Bowl", "price_text": "11.95", "price": 11.95, "ingredients": ["chicken", "green cabbage", "teriyaki sauce"], "wrap": "none", "is_raw": false, "notes": "over rice" },
-    { "n": 13, "name": "Steak Teriyaki", "section": "Rice Bowl", "price_text": "13.99", "price": 13.99, "ingredients": ["beef", "green cabbage", "teriyaki sauce"], "wrap": "none", "is_raw": false, "notes": "over rice" },
-    { "n": 14, "name": "Sesame Chicken", "section": "Rice Bowl", "price_text": "12.95", "price": 12.95, "ingredients": ["chicken", "green cabbage", "teriyaki sauce", "sesame"], "wrap": "none", "is_raw": false, "notes": "crispy deep fried, over rice" },
-    { "n": 15, "name": "Mixed Tempura", "section": "Rice Bowl", "price_text": "12.99", "price": 12.99, "ingredients": ["shrimp", "onion", "yam", "zucchini", "green bean", "green cabbage", "teriyaki sauce"], "wrap": "none", "is_raw": false, "notes": "over rice, tempura sauce on side" }
+    {
+      "n": 1,
+      "name": "Miso Soup",
+      "section": "Soup & Noodles",
+      "price_text": "2.95",
+      "price": 2.95,
+      "ingredients": [
+        "miso",
+        "tofu",
+        "seaweed"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N1"
+    },
+    {
+      "n": 2,
+      "name": "Chicken Udon",
+      "section": "Soup & Noodles",
+      "price_text": "13.99",
+      "price": 13.99,
+      "ingredients": [
+        "udon noodle",
+        "chicken",
+        "soy sauce broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N2"
+    },
+    {
+      "n": 3,
+      "name": "Vegetable Udon",
+      "section": "Soup & Noodles",
+      "price_text": "13.99",
+      "price": 13.99,
+      "ingredients": [
+        "udon noodle",
+        "vegetable",
+        "soy sauce broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N3"
+    },
+    {
+      "n": 4,
+      "name": "Spicy Beef Udon",
+      "section": "Soup & Noodles",
+      "price_text": "14.95",
+      "price": 14.95,
+      "ingredients": [
+        "udon noodle",
+        "beef",
+        "spicy broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N4"
+    },
+    {
+      "n": 5,
+      "name": "Tempura Udon",
+      "section": "Soup & Noodles",
+      "price_text": "16.50",
+      "price": 16.5,
+      "ingredients": [
+        "udon noodle",
+        "shrimp",
+        "yam",
+        "zucchini",
+        "yellow onion",
+        "green bean",
+        "soy sauce broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N5; mixed tempura in broth"
+    },
+    {
+      "n": 6,
+      "name": "Donkotsu Ramen",
+      "section": "Soup & Noodles",
+      "price_text": "16.50",
+      "price": 16.5,
+      "ingredients": [
+        "ramen noodle",
+        "pork",
+        "egg",
+        "pork broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N6; menu spelling 'Donkotsu' (tonkotsu); cha-shu pork, boiled egg"
+    },
+    {
+      "n": 7,
+      "name": "Spicy Seafood Ramen",
+      "section": "Soup & Noodles",
+      "price_text": "15.50",
+      "price": 15.5,
+      "ingredients": [
+        "ramen noodle",
+        "seafood",
+        "green mussel",
+        "spicy broth"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N7; spicy korean ramen, 2 pcs green mussel"
+    },
+    {
+      "n": 8,
+      "name": "Yakisoba",
+      "section": "Soup & Noodles",
+      "price_text": "14.45 / 15.45",
+      "price": null,
+      "ingredients": [
+        "yakisoba noodle",
+        "vegetable"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price)"
+    },
+    {
+      "n": 9,
+      "name": "Children's Combo",
+      "section": "Children's Combo",
+      "price_text": "14.50",
+      "price": 14.5,
+      "ingredients": [],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "choose 2: chicken teriyaki, steak teriyaki, sesame chicken, mixed tempura, gyoza (4 pcs)"
+    },
+    {
+      "n": 10,
+      "name": "Chicken Katsu",
+      "section": "Katsu",
+      "price_text": "17.99",
+      "price": 17.99,
+      "ingredients": [
+        "chicken",
+        "panko",
+        "katsu sauce"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "listed as 'Chicken' under Katsu; served with rice, soup, salad"
+    },
+    {
+      "n": 11,
+      "name": "Pork Katsu",
+      "section": "Katsu",
+      "price_text": "19.99",
+      "price": 19.99,
+      "ingredients": [
+        "pork",
+        "panko",
+        "katsu sauce"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "listed as 'Pork' under Katsu; pork tender loin"
+    },
+    {
+      "n": 12,
+      "name": "Chicken Teriyaki",
+      "section": "Rice Bowl",
+      "price_text": "11.95",
+      "price": 11.95,
+      "ingredients": [
+        "chicken",
+        "green cabbage",
+        "teriyaki sauce"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "over rice"
+    },
+    {
+      "n": 13,
+      "name": "Steak Teriyaki",
+      "section": "Rice Bowl",
+      "price_text": "13.99",
+      "price": 13.99,
+      "ingredients": [
+        "beef",
+        "green cabbage",
+        "teriyaki sauce"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "over rice"
+    },
+    {
+      "n": 14,
+      "name": "Sesame Chicken",
+      "section": "Rice Bowl",
+      "price_text": "12.95",
+      "price": 12.95,
+      "ingredients": [
+        "chicken",
+        "green cabbage",
+        "teriyaki sauce",
+        "sesame"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "crispy deep fried, over rice"
+    },
+    {
+      "n": 15,
+      "name": "Mixed Tempura",
+      "section": "Rice Bowl",
+      "price_text": "12.99",
+      "price": 12.99,
+      "ingredients": [
+        "shrimp",
+        "onion",
+        "yam",
+        "zucchini",
+        "green bean",
+        "green cabbage",
+        "teriyaki sauce"
+      ],
+      "wrap": "none",
+      "is_raw": false,
+      "notes": "over rice, tempura sauce on side"
+    }
   ]
 }
