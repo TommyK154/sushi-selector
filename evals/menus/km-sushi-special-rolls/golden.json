@@ -1,11 +1,11 @@
 {
-  "restaurant_name": "KM Sushi",
+  "restaurant_name": "KUU SUSHI",
   "source_photos": [
     "IMG_3435",
     "IMG_3436",
     "IMG_3437"
   ],
-  "notes": "Merged 3-photo specialty-roll menu (KM Sushi logo printed on every page). The three photos are adjacent fold-out pages: each roll appears fully on exactly one page, with only edge-bleed of neighbors, so this golden is the union of 43 unique rolls (no true duplicates). Section is coarse-grained ('Specialty Roll' / 'Vegetarian') since the fine banner categories (baked/fresh/tempura/fried/no-rice) are hard to assign per item and are not gated. Ingredient lists were transcribed from zoomed crops; items marked LOW/MED confidence in notes (a few 3436 name-to-ingredient alignments were ambiguous under glare) need Tom's careful review. smelt roe normalized to masago.",
+  "notes": "Merged 3-photo specialty-roll menu (KUU SUSHI logo printed on every page). The three photos are adjacent fold-out pages: each roll appears fully on exactly one page, with only edge-bleed of neighbors, so this golden is the union of 43 unique rolls (no true duplicates). Section is coarse-grained ('Specialty Roll' / 'Vegetarian') since the fine banner categories (baked/fresh/tempura/fried/no-rice) are hard to assign per item and are not gated. Ingredient lists were transcribed from zoomed crops; items marked LOW/MED confidence in notes (a few 3436 name-to-ingredient alignments were ambiguous under glare) need Tom's careful review. smelt roe normalized to masago.",
   "items": [
     {
       "n": 1,
@@ -19,7 +19,7 @@
         "escolar"
       ],
       "wrap": "nori",
-      "is_raw": true
+      "is_raw": false
     },
     {
       "n": 2,
@@ -30,7 +30,8 @@
       "ingredients": [
         "crab meat",
         "avocado",
-        "salmon"
+        "salmon",
+        "mayo"
       ],
       "wrap": "nori",
       "is_raw": false,
@@ -63,7 +64,8 @@
         "crab meat",
         "avocado",
         "spicy tuna",
-        "salmon"
+        "salmon",
+        "mayo"
       ],
       "wrap": "nori",
       "is_raw": false,
@@ -93,7 +95,7 @@
       "price_text": "17.50",
       "price": 17.5,
       "ingredients": [
-        "chopped scallop",
+        "scallop",
         "cucumber",
         "salmon",
         "masago"
@@ -263,7 +265,7 @@
         "potato crunch"
       ],
       "wrap": "nori",
-      "is_raw": false
+      "is_raw": true
     },
     {
       "n": 17,
@@ -275,12 +277,11 @@
         "crab meat",
         "avocado",
         "cucumber",
-        "cream cheese",
-        "freshwater eel"
+        "spicy tuna",
+        "feep fried eel"
       ],
       "wrap": "nori",
-      "is_raw": false,
-      "notes": "LOW confidence ingredients (Vegas/Jessica alignment ambiguous under glare)"
+      "is_raw": true
     },
     {
       "n": 18,
@@ -292,12 +293,13 @@
         "crab meat",
         "avocado",
         "cucumber",
-        "spicy tuna",
-        "deep fried eel"
+        "shrimp tempura",
+        "asparagus",
+        "tuna",
+        "salmon"
       ],
       "wrap": "nori",
-      "is_raw": true,
-      "notes": "LOW confidence ingredients (Vegas/Jessica alignment ambiguous under glare)"
+      "is_raw": true
     },
     {
       "n": 19,
@@ -330,8 +332,7 @@
         "yellowtail"
       ],
       "wrap": "nori",
-      "is_raw": true,
-      "notes": "MED confidence ingredients"
+      "is_raw": true
     },
     {
       "n": 21,
@@ -347,8 +348,7 @@
         "seared tuna"
       ],
       "wrap": "nori",
-      "is_raw": true,
-      "notes": "MED confidence ingredients"
+      "is_raw": true
     },
     {
       "n": 22,
@@ -357,16 +357,15 @@
       "price_text": "14.99",
       "price": 14.99,
       "ingredients": [
-        "spicy tuna",
+        "spicy crab",
         "avocado",
-        "jalapeno",
         "cilantro",
-        "garlic paste",
-        "seared tuna"
+        "pickled jalapeno",
+        "tempura crunch",
+        "potato crunch"
       ],
       "wrap": "nori",
-      "is_raw": true,
-      "notes": "LOW confidence ingredients (Mexican/Chaos alignment ambiguous)"
+      "is_raw": true
     },
     {
       "n": 23,
@@ -402,7 +401,7 @@
         "beef short rib"
       ],
       "wrap": "nori",
-      "is_raw": false,
+      "is_raw": true,
       "notes": "marinated beef short rib"
     },
     {
@@ -418,7 +417,7 @@
         "avocado"
       ],
       "wrap": "nori",
-      "is_raw": false
+      "is_raw": true
     },
     {
       "n": 26,
@@ -501,7 +500,7 @@
       "price_text": "13.95",
       "price": 13.95,
       "ingredients": [
-        "deep fried tofu",
+        "tofu",
         "red radish",
         "avocado",
         "seaweed salad"
@@ -519,11 +518,12 @@
       "ingredients": [
         "avocado",
         "cucumber",
-        "deep fried tofu",
+        "tofu",
         "potato crunch"
       ],
       "wrap": "nori",
-      "is_raw": false
+      "is_raw": false,
+      "notes": "deep fried tofu"
     },
     {
       "n": 32,
@@ -550,16 +550,16 @@
         "spicy tuna",
         "radish sprout",
         "yellowtail",
-        "fried garlic",
+        "garlic",
         "jalapeno"
       ],
-      "wrap": "none",
+      "wrap": "yellowtail",
       "is_raw": true,
-      "notes": "wrapped with yellowtail (no nori)"
+      "notes": "wrapped with yellowtail (no nori); no rice; fried garlic"
     },
     {
       "n": 34,
-      "name": "Mig'ane",
+      "name": "Migrane",
       "section": "Specialty Roll",
       "price_text": "17.75",
       "price": 17.75,
@@ -570,10 +570,11 @@
         "shrimp tempura",
         "salmon",
         "escolar",
-        "fried jalapeno"
+        "jalapeno"
       ],
       "wrap": "nori",
-      "is_raw": true
+      "is_raw": true,
+      "notes": "fried jalapeno"
     },
     {
       "n": 35,
@@ -599,11 +600,12 @@
       "price": 13.95,
       "ingredients": [
         "spicy tuna",
-        "pickled jalapeno",
+        "jalapeno",
         "cream cheese"
       ],
       "wrap": "nori",
-      "is_raw": true
+      "is_raw": false,
+      "notes": "pickled jalapeno; deep fried roll"
     },
     {
       "n": 37,
@@ -632,9 +634,9 @@
         "shrimp tempura",
         "salmon"
       ],
-      "wrap": "none",
+      "wrap": "salmon",
       "is_raw": true,
-      "notes": "wrapped with salmon (no nori)"
+      "notes": "wrapped with salmon (no nori); no rice"
     },
     {
       "n": 39,
@@ -677,8 +679,8 @@
         "cream cheese"
       ],
       "wrap": "nori",
-      "is_raw": true,
-      "notes": "chopped spicy salmon"
+      "is_raw": false,
+      "notes": "chopped spicy salmon; deep fried roll"
     },
     {
       "n": 42,
@@ -707,7 +709,8 @@
         "salmon",
         "yellowtail",
         "avocado",
-        "crab meat"
+        "crab meat",
+        "cucumber"
       ],
       "wrap": "none",
       "is_raw": true,

@@ -121,11 +121,14 @@
       "price_text": "14.45 / 15.45",
       "price": null,
       "ingredients": [
-        "yakisoba noodle"
+        "yakisoba noodle",
+        "chicken",
+        "steak",
+        "shrimp"
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price); various vegetables not itemized"
+      "notes": "N8; choice of meat: chicken/vegetable 14.45, steak/shrimp 15.45; price null (multi-price); vegetable option not itemized in ingredients"
     },
     {
       "n": 9,
@@ -133,10 +136,15 @@
       "section": "Children's Combo",
       "price_text": "14.50",
       "price": 14.5,
-      "ingredients": [],
+      "ingredients": [
+        "chicken",
+        "steak",
+        "shrimp",
+        "pork"
+      ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "choose 2: chicken teriyaki, steak teriyaki, sesame chicken, mixed tempura, gyoza (4 pcs)"
+      "notes": "choose 2: chicken teriyaki, steak teriyaki, sesame chicken, mixed tempura (INFERRED shrimp), gyoza (INFERRED pork, 4 pcs)"
     },
     {
       "n": 10,
@@ -166,7 +174,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "listed as 'Pork' under Katsu; pork tender loin"
+      "notes": "listed as 'Pork' under Katsu; served with rice, soup, salad"
     },
     {
       "n": 12,
@@ -231,7 +239,7 @@
       ],
       "wrap": "none",
       "is_raw": false,
-      "notes": "over rice, tempura sauce on side"
+      "notes": "over rice, tempura sauce on side; tempura fried: 2 shrimp, 1 onion, 1 yam, 1 zucchini, 2 green beans"
     }
   ]
 }
