@@ -80,9 +80,9 @@ are combined into one multi-photo menu (`km-sushi-special-rolls`) to exercise th
 merge and dedupe guard; the rest are one menu per page. Tom reviews every golden;
 corrections land as follow-up commits.
 
-Human-review snapshot (2026-07-19):
+Human-review snapshot (2026-07-20):
 
 - REVIEWED: `km-sushi-nigiri`, `kuu-sushi-happy-hour`, `km-sushi-dinner`,
-  `km-sushi-cold-appetizer`, `km-sushi-lunch`
-- PENDING REVIEW: `km-sushi-sashimi`, `km-sushi-special-rolls`,
-  `km-sushi-hot-appetizer-salad`, `km-sushi-noodles-kitchen`
+  `km-sushi-cold-appetizer`, `km-sushi-lunch`, `km-sushi-sashimi`,
+  `km-sushi-special-rolls`, `km-sushi-hot-appetizer-salad`,
+  `km-sushi-noodles-kitchen`
