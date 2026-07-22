@@ -553,7 +553,7 @@
         "garlic",
         "jalapeno"
       ],
-      "wrap": "yellowtail",
+      "wrap": "none",
       "is_raw": true,
       "notes": "wrapped with yellowtail (no nori); no rice; fried garlic"
     },
@@ -634,7 +634,7 @@
         "shrimp tempura",
         "salmon"
       ],
-      "wrap": "salmon",
+      "wrap": "none",
       "is_raw": true,
       "notes": "wrapped with salmon (no nori); no rice"
     },
