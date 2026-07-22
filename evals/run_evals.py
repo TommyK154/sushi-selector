@@ -216,7 +216,9 @@ def normalize_ingredient(name: str, aliases: dict[str, str]) -> str:
     return aliases.get(n, n)
 
 
-def normalize_name(name: str) -> str:
+def normalize_name(name: Optional[str]) -> str:
+    if not isinstance(name, str):
+        return ""
     return " ".join(name.strip().lower().split())
 
 
