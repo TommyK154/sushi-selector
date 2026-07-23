@@ -42,8 +42,22 @@ Return your results using this schema:
       "partial_results": "any useful output captured before the failure (only when status=fail)"
     }
   ],
-  "fixes_applied": ["list of things you auto-fixed, e.g. removed console.log in src/worker.ts:42"],
-  "needs_human": ["list of things that would change behavior and need manual review"]
+  "fixes_applied": [
+    {
+      "file": "path/to/file.ts",
+      "line": 42,
+      "what": "removed console.log",
+      "step": "grep-scan"
+    }
+  ],
+  "needs_human": [
+    {
+      "file": "path/to/file.ts",
+      "line": 42,
+      "what": "description of the issue",
+      "reason": "why it was not auto-fixed (e.g., would change behavior)"
+    }
+  ]
 }
 ```
 
