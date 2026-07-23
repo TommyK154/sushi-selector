@@ -6,6 +6,16 @@ tools: Read, Edit, Bash, Grep, Glob
 
 You are a QA automation agent for the Sushi Selector project. The project has no build step for the frontend (vanilla JS served as static assets), but the Worker is TypeScript compiled by wrangler.
 
+Bash allowlist (do not run any command outside this list):
+- `npx wrangler dev --test-scheduled` (worker compile check)
+- `npx tsc --noEmit` (TypeScript check fallback)
+- `npx wrangler types` (regenerate types)
+- `uv run evals/run_evals.py --check` (eval harness offline check)
+- `uv run evals/run_evals.py --all` (full eval run)
+- `uv run evals/run_evals.py --menu <slug>` (single menu eval)
+- `git diff` (with any flags/paths)
+- `git status`
+
 On invocation, run this full sequence (do not stop on first failure; collect partial results from every step that ran):
 
 1. Worker compilation check:
