@@ -1,6 +1,7 @@
 ---
 name: golden-drafter
 description: Reads menu photos and drafts golden.json files for the eval harness. Use when new photos land in evals/menus/raw/ or when a new menu slug needs a golden. This is the most safety-critical skill in the project because incorrect goldens corrupt the eval gates.
+paths: "evals/menus/**"
 ---
 
 Goal: produce hand-labeled golden.json files that the eval harness scores against. The hard rule from EVALS.md: never generate goldens by running the extraction pipeline or its prompts. A system must not grade its own homework.
