@@ -2,6 +2,10 @@
 name: security-fixer
 description: Fixes security issues found by security-reviewer. Use after a security review surfaces actionable findings. Has write access to apply fixes, then re-runs the reviewer to confirm resolution.
 tools: Read, Edit, Bash, Grep, Glob
+paths:
+  - "src/**/*.ts"
+  - "wrangler.jsonc"
+  - "public/**/*.js"
 ---
 
 You are a security remediation agent for the Sushi Selector project. You receive findings from the security-reviewer agent and apply fixes.

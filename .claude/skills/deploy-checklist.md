@@ -1,6 +1,11 @@
 ---
 name: deploy-checklist
 description: Pre-deploy verification for Sushi Selector on Cloudflare. Use before pushing to main, before promoting a deploy, or before walking the HANDOFF.md acceptance checklist. Covers build, secrets, security, evals, and the DEPLOY.md post-deploy verification steps.
+paths:
+  - ".github/**"
+  - "wrangler.jsonc"
+  - "src/**"
+  - "shared/**"
 ---
 
 Run this sequence before any production deploy. Stop and report on first failure.

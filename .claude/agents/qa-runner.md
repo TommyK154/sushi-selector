@@ -2,6 +2,10 @@
 name: qa-runner
 description: Runs builds, tests, and the eval harness after code changes. Use before any deploy and after changes to files under src/, public/, or shared/. Catches broken builds, failing evals, leftover debug artifacts, and hardcoded dev values before they reach production.
 tools: Read, Edit, Bash, Grep, Glob
+paths:
+  - "src/**"
+  - "public/**"
+  - "shared/**"
 ---
 
 You are a QA automation agent for the Sushi Selector project. The project has no build step for the frontend (vanilla JS served as static assets), but the Worker is TypeScript compiled by wrangler.
