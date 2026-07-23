@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(npx wrangler dev*)",
+      "Bash(npx wrangler types*)",
+      "Bash(npx tsc*)",
+      "Bash(uv run evals/*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(ls*)"
+    ]
+  }
+}
