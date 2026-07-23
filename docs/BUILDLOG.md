@@ -175,3 +175,152 @@ pushed to origin/main, closing report printed.
   as printed, never renamed to a category. (6) placeholder "2026-07-2x" replaced
   with "2026-07-22".
 - docs/BUILDLOG.md: this entry appended
+
+---
+
+## Session 2026-07-22: Phase 1 product artifacts (schemas, prompts, aliases) over 68c878c
+
+Base commit: 68c878c
+
+### Authorized scope (verbatim)
+
+SCOPE (pre-approved; do not re-confirm, do not exceed):
+
+Task: author the Phase 1 product artifacts. Schemas, prompts, and the
+expanded alias table. No API calls, no wrangler, no eval-harness runs.
+Also confirm the consistency-gate menu designation by visual inspection.
+Files, modify only these:
+  shared/schema/index.schema.json      (new)
+  shared/schema/details.schema.json    (new)
+  shared/schema/url.schema.json        (new, combined URL schema)
+  shared/prompts/system.md             (new)
+  shared/prompts/index-task.md         (new)
+  shared/prompts/details-task.md       (new)
+  shared/prompts/url-task.md           (new)
+  shared/aliases.json                  (expand existing 5 entries)
+  docs/BUILDLOG.md                     (append)
+Not touching: everything else. Explicitly: nothing under src/, public/,
+.github/, evals/run_evals.py, any golden.json. No wrangler, no eval
+runs, no Anthropic API calls. This session writes files and commits;
+it does not spend.
+Dependencies: evals/menus/README.md (LOCKED conventions, single source
+per T-1.3), SPEC.md schema shapes, shared/aliases.json's existing
+5 entries and the alias seeds already logged (freshwater eel to eel,
+unagi to eel, tamago to egg, smelt roe to masago, flying fish roe to
+tobiko, salmon roe to ikura).
+Done when: all seven files written and internally consistent with
+each other and with README; aliases.json expanded; consistency-gate
+menus confirmed by visual check; BUILDLOG entry appended; one commit
+pushed; closing report printed with the full system.md content
+verbatim for oversight cross-check.
+Priority: this is the only task this session.
+
+### Pre-flight
+
+1. Working tree clean; HEAD == origin/main == 68c878cfcd4c5ea31b6f585b99498ce864a8bdec. Pass.
+2. shared/schema/ and shared/prompts/ confirmed empty. Pass.
+3. shared/aliases.json confirmed exactly 5 entries. Pass.
+4. evals/menus/README.md LOCKED section confirmed present with all three
+   named 2026-07-22 clarifications (is_raw item-as-served semantics,
+   seared-fish compounds, closed garnish-exception list). Flagged one
+   discrepancy: the check describes "7 master rules" but the LOCKED
+   section is an unlabeled list of 14 bullets, not a countable 7. Resolved
+   against this file's own history: the "7-rule master list" phrase
+   originates in the 2026-07-22 rule-parity session above and was the
+   count before that session's own extensions and the following
+   clarifications session grew it further. Substantive content check
+   passed; treated as non-blocking and proceeded.
+
+### Manifest (files touched)
+
+- shared/schema/index.schema.json: created, transcribed verbatim from SPEC.md
+- shared/schema/details.schema.json: created, transcribed verbatim from SPEC.md
+- shared/schema/url.schema.json: created, combined shape (details item shape
+  plus section, price_text, price per item, plus top-level sections array),
+  no restaurant_name field (SPEC.md's prose description of the combined
+  schema does not name one; see findings below)
+- shared/prompts/system.md: created, style guide mirroring all 14 LOCKED
+  README rules in expanded substance (not summary), ~2,727 words / ~16.8k
+  characters, comfortably over the 2,500-token cache-floor target. Adds one
+  clause beyond a literal README mirror: preserve the verbatim printed
+  spelling in notes when a normalized ingredient (currently: krab to
+  imitation crab) differs materially from what was printed, per SPEC.md's
+  own description of this prompt's crab guidance
+- shared/prompts/index-task.md: created, index-pass instruction referencing index.schema.json
+- shared/prompts/details-task.md: created, details-pass instruction referencing details.schema.json
+- shared/prompts/url-task.md: created, combined-pass instruction referencing url.schema.json
+- shared/aliases.json: expanded from 5 to 8 entries (added freshwater eel ->
+  eel, unagi -> eel, tamago -> egg). Confirmed fried garlic and fried onion
+  are not present as alias sources. The 5 original entries left untouched
+  (see findings below on one pre-existing entry)
+- docs/BUILDLOG.md: this entry appended
+
+### Consistency-gate menu designation (visual inspection)
+
+Opened evals/menus/raw/IMG_3434.jpeg (km-sushi-nigiri), IMG_3433.jpeg
+(km-sushi-sashimi), IMG_3440.jpeg (km-sushi-cold-appetizer), and
+IMG_3441.jpeg (km-sushi-hot-appetizer-salad) directly.
+
+- Densest: `km-sushi-nigiri` (IMG_3434). Confirmed: single photo, three
+  menu sections (Premium Sushi, Sushi, Basic Roll), roughly 40 priced items,
+  visible glare and 90-degree rotation.
+- Ugliest: `km-sushi-sashimi` (IMG_3433). IMG_3433 carries comparably severe
+  rotation and glare to IMG_3434 (a bright wash over the gold Premium
+  Sashimi panel) but far fewer items, making it a distinct stress case from
+  the density pick rather than a duplicate. IMG_3440 and IMG_3441 were also
+  checked and ruled out: both rotated but clean and fully legible, no
+  meaningful glare, consistent with README tagging them "rotated" only.
+
+### Findings for Tom (report-only, no edits made)
+
+- url.schema.json has no `restaurant_name` field. SPEC.md's prose for the
+  combined URL schema names only "the details item shape plus section,
+  price_text, and price per item, and the sections array," with no mention
+  of restaurant_name. Implemented literally as described, but this means a
+  URL-only parse can never produce a real restaurant name and always falls
+  back to "Menu, <date>." Possible gap worth a deliberate decision, not
+  patched here (design-level, out of scope to resolve unilaterally).
+- shared/aliases.json's pre-existing entry `"bonito flake": "katsuo bushi"`
+  runs the opposite direction from the general non-roe convention (plain
+  English canonical, Japanese aliases inward, e.g. tamago -> egg), and
+  README does not mention bonito or katsuobushi at all under either
+  pattern. Left untouched: this entry predates this session and the task
+  was to expand, not to correct existing entries. Flagging for a deliberate
+  call on which direction is intended.
+- Considered but did not add `anago -> eel` (saltwater eel, distinct from
+  unagi) or `mayo sauce -> mayo` as further aliases. Neither is named in
+  README or in the seed list this session was given; adding either would
+  have been an unverified guess rather than an implied requirement.
+- README's roe-family rule states "the alias table... maps English -> the
+  menu term, never the reverse," a fact about alias-table directionality
+  that system.md does not restate verbatim, since it describes a
+  downstream client mechanic rather than an extraction instruction. Judged
+  non-blocking, noting for the record per the self-check task.
+- The "preserve verbatim spelling in notes" clause added to system.md's
+  crab section (per SPEC.md's explicit description) was not generalized to
+  the roe family or tamago/egg, since only the crab case is stated
+  explicitly anywhere in the source docs. Worth a deliberate decision on
+  whether it should generalize.
+- None of this session's seven artifacts have been run through the model or
+  the eval harness (both explicitly out of scope this session); T-1.3's
+  "run the eval harness" step remains the actual verification of whether
+  these prompts and schemas work in practice.
+
+### Patterns established
+
+- Alias-table seeds logged in the prior 2026-07-22 session (freshwater eel,
+  unagi, tamago; roe family) are now implemented in shared/aliases.json.
+- System-prompt style guide content should mirror README's LOCKED section
+  rule-for-rule but is expected to expand each into fuller extraction
+  guidance (rationale, edge cases, examples) rather than restate it as a
+  summary; SPEC.md's own prose about system.md's content is an equally
+  authoritative source for prompt content, not just a schema-shape
+  reference, and this session found one place (crab/notes preservation)
+  where SPEC.md's prose said more than README's bullet did.
+
+### Single next action
+
+Run `uv run evals/run_evals.py --menu km-sushi-nigiri` (or `--all`) once
+Tom authorizes an Anthropic API spend, to get first empirical signal on
+whether these schemas and prompts produce valid, accurate output before
+iterating further.
