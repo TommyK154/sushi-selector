@@ -143,3 +143,35 @@ honored.
   tobiko, salmon roe -> ikura
 - The recurring-garnish exception means "fried garlic" and "fried onion" are
   canonical leaves, NOT alias sources to garlic/onion.
+
+---
+
+## Session 2026-07-22: convention clarifications follow-up over 2843c21
+
+Base commit: 2843c21
+
+### Authorized scope (verbatim)
+
+SCOPE (pre-approved; do not re-confirm, do not exceed):
+Task: convention clarifications follow-up. Six small edits to
+evals/menus/README.md, receipt, one commit.
+Files, modify only: evals/menus/README.md, docs/BUILDLOG.md (append).
+Not touching: everything else. Goldens explicitly untouched this
+session. No wrangler, no eval runs, no Anthropic API calls.
+Done when: six edits applied, BUILDLOG entry appended, one commit
+pushed to origin/main, closing report printed.
+
+### Manifest (files touched)
+
+- evals/menus/README.md: six edits. (1) is_raw bullet: printed-name-is-evidence
+  clarification (sweet shrimp/live default raw; is_raw tracks the item as served;
+  explicit whole-item cooking method overrides the live default). (2) ingredients
+  bullet: seared-fish compounds (seared tuna, seared pepper salmon) stay whole as
+  is_raw evidence. (3) photos intro reworded to one restaurant KUU SUSHI captured
+  as two menu artifacts; happy-hour bullet lead-in relabeled to "KUU SUSHI happy
+  hour". (4) coverage sentence: four restaurant-shorthand "KM" changed to "KUU"
+  (slug references left). (5) prep-strip bullet: exception list is explicit and
+  closed, joined only via documented convention change; ingredients transcribed
+  as printed, never renamed to a category. (6) placeholder "2026-07-2x" replaced
+  with "2026-07-22".
+- docs/BUILDLOG.md: this entry appended

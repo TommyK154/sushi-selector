@@ -6,8 +6,8 @@ photos under `photos/` and a hand-verified `golden.json`.
 
 ## What the 12 photos are
 
-The photos are two restaurants, not the 6 to 10 distinct menus EVALS.md
-imagined:
+The photos are one restaurant, KUU SUSHI, captured as two menu artifacts
+rather than the 6 to 10 distinct menus EVALS.md imagined:
 
 - **KUU SUSHI**: one large spiral-bound laminated menu, shot across 10 pages
   (IMG_3433 to 3437 and 3440 to 3444). Glare, lamination, several pages rotated
@@ -15,12 +15,12 @@ imagined:
   split here into page-level eval menus rather than one giant golden. (The logo
   font reads ambiguously as "KM", which the initial file creation propagated
   into the folder slugs; those `km-sushi-` slugs are kept stable deliberately.)
-- **KUU Sushi**: a clean, flat, well-lit 2-page happy-hour menu (IMG_3439 front,
-  IMG_3438 special rolls).
+- **KUU SUSHI happy hour**: a clean, flat, well-lit 2-page happy-hour menu
+  (IMG_3439 front, IMG_3438 special rolls).
 
-Coverage against the EVALS.md wish list: laminated glare (KM, all), lazy angle
-and rotation (KM 3433 to 3437, 3440, 3441), dense multi-column (KM nigiri and
-special rolls), non-sushi cooked items (KM noodles and kitchen page), and a
+Coverage against the EVALS.md wish list: laminated glare (KUU, all), lazy angle
+and rotation (KUU 3433 to 3437, 3440, 3441), dense multi-column (KUU nigiri and
+special rolls), non-sushi cooked items (KUU noodles and kitchen page), and a
 clean multi-photo merge (KUU, 2 photos). Not represented: a handwritten
 specials board, and true dim-lighting. Flagged for Tom.
 
@@ -47,15 +47,21 @@ predictions and goldens align:
 
 - **ingredients**: lowercase, singular, substantive fillings only (fish,
   shellfish, vegetables, sauces, cheese). Compound preparations stay whole
-  ("spicy tuna" is one ingredient, "stick crab" is one).
+  ("spicy tuna" is one ingredient, "stick crab" is one). Seared-fish compounds
+  stay whole too (seared tuna, seared pepper salmon): searing marks fish raw at
+  the center, so the word carries is_raw evidence and is never stripped.
 - **preparation methods strip from ingredient names**: chopped scallop is
   scallop, deep fried eel is eel, deep fried tofu is tofu. Locked exceptions:
   pickle stays pickle (never folded into cucumber); "mayo" is preferred over
   "mayo sauce"; and "fried garlic" and "fried onion" stay whole. General test
-  (formalized from the 2026-07-2x sweep): a preparation-method compound that
+  (formalized from the 2026-07-22 sweep): a preparation-method compound that
   recurs across items as a named garnish reclassifies from "strip" to
   "canonical ingredient" (the same test as pickle/cucumber), rather than
-  defaulting to stripping.
+  defaulting to stripping. The exception list is explicit and closed
+  (currently: pickle, mayo, fried garlic, fried onion); a new recurring garnish
+  joins it only through a documented convention change, never ad hoc during
+  labeling. Ingredients are transcribed as printed, never renamed to a category
+  (nothing is ever labeled "crispy topping").
 - **canonical form is the sushi-menu term, not the English translation**, for
   the roe family (masago, tobiko, ikura). Use `masago` (not "smelt roe"),
   `tobiko` (not "flying fish roe"), and `ikura` (not "salmon roe"). For the roe
@@ -85,7 +91,12 @@ predictions and goldens align:
 - **is_raw**: `true` if the item contains raw fish (includes seared tuna, which
   is raw at the center), `false` for fully cooked items, `null` when not
   determinable. Shrimp and octopus default to `false` (cooked) absent menu
-  evidence to the contrary.
+  evidence to the contrary. The printed item name counts as menu evidence:
+  sweet shrimp (amaebi) and items sold as live default to raw. is_raw tracks
+  whether the item as served contains raw fish, not whether every component is
+  raw (a fried amaebi head changes nothing). An explicit cooking method applied
+  to the whole item in its printed name (grilled, fried, boiled) overrides the
+  live default.
 - **price / price_text**: `price` is the parsed number; `price_text` is the
   verbatim string. Market price is `price: null`, `price_text: "MP"`. Items
   priced only as a combo keep the combo price.
