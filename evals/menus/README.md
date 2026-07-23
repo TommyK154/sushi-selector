@@ -9,10 +9,12 @@ photos under `photos/` and a hand-verified `golden.json`.
 The photos are two restaurants, not the 6 to 10 distinct menus EVALS.md
 imagined:
 
-- **KM Sushi**: one large spiral-bound laminated menu, shot across 10 pages
+- **KUU SUSHI**: one large spiral-bound laminated menu, shot across 10 pages
   (IMG_3433 to 3437 and 3440 to 3444). Glare, lamination, several pages rotated
   90 degrees, 300+ items total. Far larger than the 6-photo parse cap, so it is
-  split here into page-level eval menus rather than one giant golden.
+  split here into page-level eval menus rather than one giant golden. (The logo
+  font reads ambiguously as "KM", which the initial file creation propagated
+  into the folder slugs; those `km-sushi-` slugs are kept stable deliberately.)
 - **KUU Sushi**: a clean, flat, well-lit 2-page happy-hour menu (IMG_3439 front,
   IMG_3438 special rolls).
 
@@ -46,23 +48,51 @@ predictions and goldens align:
 - **ingredients**: lowercase, singular, substantive fillings only (fish,
   shellfish, vegetables, sauces, cheese). Compound preparations stay whole
   ("spicy tuna" is one ingredient, "stick crab" is one).
-- **canonical form is the sushi-menu term, not the English translation**. Use
-  `masago` (not "smelt roe") and `tobiko` (not "flying fish roe"). The alias
-  table (shared/aliases.json) maps English -> the menu term, never the reverse.
+- **preparation methods strip from ingredient names**: chopped scallop is
+  scallop, deep fried eel is eel, deep fried tofu is tofu. Locked exceptions:
+  pickle stays pickle (never folded into cucumber); "mayo" is preferred over
+  "mayo sauce"; and "fried garlic" and "fried onion" stay whole. General test
+  (formalized from the 2026-07-2x sweep): a preparation-method compound that
+  recurs across items as a named garnish reclassifies from "strip" to
+  "canonical ingredient" (the same test as pickle/cucumber), rather than
+  defaulting to stripping.
+- **canonical form is the sushi-menu term, not the English translation**, for
+  the roe family (masago, tobiko, ikura). Use `masago` (not "smelt roe"),
+  `tobiko` (not "flying fish roe"), and `ikura` (not "salmon roe"). For the roe
+  family the alias table (shared/aliases.json) maps English -> the menu term,
+  never the reverse. Elsewhere the plain English filtering term is canonical:
+  `egg`, not `tamago` (tamago is a preparation of egg and aliases inward to egg).
 - **crab is never normalized to imitation crab**. "Crab" and "crab meat" stay as
   written; only a literal "krab" or "imitation crab" on the menu maps to
   `imitation crab`.
+- **species and type qualifiers stay as printed on that item**, and are never
+  imported from other items. An item printing "deep fried eel" yields eel even
+  when the same menu prints "freshwater eel" elsewhere. This mirrors the crab
+  rule: never add specificity the menu did not print for that item. Downstream
+  unification of variants (freshwater eel to eel) belongs to shared/aliases.json,
+  not the labels.
+- **vague collective terms live in notes only**, never the ingredients array.
+  Terms like "various vegetables", "assorted sashimi", "seafood", and "japanese
+  vegetable" carry no filtering signal, so they are recorded in `notes` and left
+  out of `ingredients`.
 - **wrap is its own field**, so the wrapper is never an ingredient. Values:
-  `nori`, `soy_paper`, `rice_paper`, `none`, `unknown`. Nigiri and sashimi are
-  `none`; standard rolls are `nori` unless the menu says otherwise.
+  `nori`, `soy_paper`, `rice_paper`, `none`, `unknown`, and the enum never
+  grows. Nigiri and sashimi are `none`; standard rolls are `nori` unless the
+  menu says otherwise. Specialty physical wraps (cucumber, avocado, fish) use
+  `wrap: none` plus a note naming the wrapper.
 - **rice is not listed** as an ingredient. It is the assumed base for nigiri
   and rolls, and listing it everywhere adds noise without signal.
 - **is_raw**: `true` if the item contains raw fish (includes seared tuna, which
   is raw at the center), `false` for fully cooked items, `null` when not
-  determinable.
+  determinable. Shrimp and octopus default to `false` (cooked) absent menu
+  evidence to the contrary.
 - **price / price_text**: `price` is the parsed number; `price_text` is the
   verbatim string. Market price is `price: null`, `price_text: "MP"`. Items
   priced only as a combo keep the combo price.
+- **combo choice sets**: two-roll dinner combos merge both rolls' inferred
+  ingredients into the item; large choice sets (lunch's 11 rolls) stay notes
+  only; small protein choice sets (roughly 5 options or fewer) enumerate all
+  options in `ingredients`.
 - **restaurant_name**: `null` unless the name is literally printed in that menu's
   photos. Never infer it from the folder name or context. On multi-photo menus
   the merge takes the first non-null name in photo order (see docs/SPEC.md).
