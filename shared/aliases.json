@@ -3,8 +3,10 @@
   "flying fish roe": "tobiko",
   "krab": "imitation crab",
   "salmon roe": "ikura",
-  "bonito flake": "katsuo bushi",
+  "katsuo bushi": "bonito flake",
   "freshwater eel": "eel",
   "unagi": "eel",
-  "tamago": "egg"
+  "tamago": "egg",
+  "anago": "eel",
+  "mayo sauce": "mayo"
 }

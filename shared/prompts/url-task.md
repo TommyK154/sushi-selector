@@ -13,6 +13,9 @@ pass and a separate details pass the way a photo does, this pass combines
 both in one call. Produce a single JSON object that validates against
 `shared/schema/url.schema.json`:
 
+- `restaurant_name`: the restaurant's name, only if it is literally printed
+  somewhere on the fetched page, per the style guide's restaurant_name rule.
+  Otherwise `null`.
 - `sections`: the ordered list of section headers found on the page, each an
   object with just a `name` string, or an empty array if the page has no
   printed section structure.

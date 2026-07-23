@@ -324,3 +324,254 @@ Run `uv run evals/run_evals.py --menu km-sushi-nigiri` (or `--all`) once
 Tom authorizes an Anthropic API spend, to get first empirical signal on
 whether these schemas and prompts produce valid, accurate output before
 iterating further.
+
+---
+
+## Session 2026-07-23: Phase 1 request layer over 3e53b4a
+
+Base commit: 3e53b4a (Phase 1: extraction schemas, prompts, and expanded
+alias table)
+
+### Authorized scope (verbatim)
+
+SCOPE (pre-approved; do not re-confirm, do not exceed):
+
+Task: Phase 1 request layer. Write src/extract.ts, complete the eval
+harness pipeline wiring, and apply four adjudicated corrections to the
+shared artifacts. This session ends at the spend gate: it makes ZERO
+Anthropic API calls. Wiring the gun is in scope; firing it is not.
+Files, modify only these:
+  src/extract.ts               (new)
+  evals/run_evals.py           (complete run_pipeline_for_menu, --batch
+                                and --url-smoke plumbing, report
+                                cost/cache lines)
+  shared/schema/url.schema.json  (add nullable restaurant_name)
+  shared/prompts/url-task.md     (one clause: restaurant_name only when
+                                  literally printed on the fetched page,
+                                  else null)
+  shared/aliases.json          (flip bonito entry, add three)
+  docs/SPEC.md                 (one-line amendment: combined URL schema
+                                includes nullable restaurant_name)
+  docs/BUILDLOG.md              (append)
+Not touching: everything else. Explicitly: no other src/ files, nothing
+under public/ or .github/, no golden.json, no system.md, no
+index/details schemas or task files. No wrangler. NO Anthropic API
+calls of any kind. The only permitted harness invocations are
+`uv run evals/run_evals.py --check` and its built-in self-test; never
+--menu, --all, --repeat, --batch, or --url-smoke this session, since
+after your wiring those spend real credits.
+Dependencies: HEAD 3e53b4a artifacts (schemas, prompts, aliases);
+SPEC.md call specification; CLAUDE.md live-docs mandate.
+Done when: live-docs checks recorded; extract.ts written with both
+output paths; run_pipeline_for_menu implemented mirroring extract.ts's
+request shape; corrections applied; --check green; BUILDLOG entry
+appended; one commit pushed; closing report printed. No spend.
+Priority: this is the only task this session.
+
+### Amendment (mid-session, user-authorized)
+
+At the plan-mode checkpoint, extract.ts's design ran into a real
+architectural gap: it needs shared/prompts/*.md content at build time,
+but Wrangler's bundler (esbuild) has no default loader for .md (verified
+against live Cloudflare docs: defaults are .txt/.html/.sql/.bin/.wasm
+only), and adding one requires a wrangler.jsonc "rules" entry, which the
+original scope's "Not touching" line excluded ("No wrangler"). Asked the
+user how to proceed (inline copies vs. real imports vs. escalate); the
+user authorized wrangler.jsonc joining the touched-files list for
+exactly one change: a `rules` entry declaring shared/prompts/*.md as
+Text modules (fallthrough true), so extract.ts imports the real prompt
+files rather than holding duplicate copies. Verification: a build-only
+check with no deploy, no dev server, no account interaction, if one
+exists; otherwise skip and tag unverified. See Verification below for
+what was actually run.
+
+### Pre-flight
+
+1. Working tree clean; HEAD == origin/main == 3e53b4a3b49d246ed17b0c1647977687d1297789. Pass.
+2. All seven shared artifacts from 3e53b4a present (index/details/url
+   schemas; system/index-task/details-task/url-task prompts). Pass.
+3. evals/run_evals.py's run_pipeline_for_menu still raised
+   NotImplementedError before this session's edits. Pass.
+4. ANTHROPIC_API_KEY present in env (needed for nothing this session,
+   present so a later --check exit-criteria read would be valid). Pass.
+
+### Live-docs findings (verified this session, not from training memory)
+
+- Structured outputs: `output_config: {"format": {"type": "json_schema",
+  "schema": {...}}}`, no `name` field. claude-haiku-4-5-20251001 is
+  explicitly listed as supported.
+- Strict tool fallback: `strict: true` plus `additionalProperties: false`
+  and `required` on `input_schema`; forced via top-level
+  `tool_choice: {"type": "tool", "name": "..."}`; result read from the
+  `tool_use` block's `.input`.
+- Prompt caching: `cache_control: {"type": "ephemeral"}` (or with
+  `ttl: "1h"`), placeable on image blocks. Minimum cacheable prefix for
+  Haiku 4.5 confirmed 4,096 tokens (matches SPEC.md's existing claim).
+  Usage fields: cache_creation_input_tokens, cache_read_input_tokens,
+  input_tokens (uncached remainder only, not the total).
+- Message Batches API: `POST /v1/messages/batches`,
+  `{"requests": [{"custom_id", "params"}]}`; poll `processing_status`
+  until "ended"; stream results from `results_url`; results arrive in
+  any order, keyed by custom_id; `result.type` in
+  succeeded/errored/canceled/expired.
+- Web fetch, model-support finding that diverges from an implicit
+  SPEC.md assumption: the dynamic-filtering tool versions
+  (web_fetch_20260209 and later) are documented to support Fable 5,
+  Opus 4.8, Mythos 5/Preview, Opus 4.7, Opus 4.6, Sonnet 5, and Sonnet
+  4.6 only. claude-haiku-4-5-20251001, the pinned default model, is not
+  on that list. extract.ts and the harness therefore use the basic
+  web_fetch_20250910 tool (GA, no beta header) for the URL pass, not a
+  _202602xx variant. Also flagging: structured outputs
+  (output_config.format) is documented incompatible with citations
+  (returns 400), so citations stay off on the web_fetch tool; SPEC.md
+  does not mention this interaction.
+
+### Manifest (files touched)
+
+- src/extract.ts: created. Provider interface (ExtractionProvider) plus
+  AnthropicExtractionProvider, calling the Messages API directly via
+  fetch (no new npm dependency; package.json out of scope). Both output
+  paths implemented and reachable: json_schema (primary, default) and
+  strict_tool (fallback), selected by a real constructor parameter, not
+  described-only. Identical image-first, cache_control-on-image message
+  shape shared by runIndex and runDetails. runUrl's strict_tool mode
+  runs as two calls (fetch, then a forced-tool follow-up), since forcing
+  a single tool via tool_choice precludes also calling web_fetch in the
+  same turn; this two-call shape is this session's inferred design,
+  flagged since SPEC.md does not address the interaction. Model pinned
+  from env.MODEL (default claude-haiku-4-5-20251001); max_tokens
+  pinned per endpoint (2048/2048/8192), never client-supplied. Returns
+  and logs cache_creation_input_tokens/cache_read_input_tokens on every
+  call. Real imports of the four shared/prompts/*.md files and three
+  shared/schema/*.json files (see Amendment). tsc --noEmit passes clean
+  (four .md imports carry a documented @ts-expect-error each, since this
+  TypeScript version, 7.0.2, only accepts wildcard/ambient module
+  declarations from a file with no top-level import/export of its own,
+  i.e. a separate .d.ts, which is out of scope; this has no effect on
+  wrangler's esbuild bundle, which does not run tsc).
+- evals/run_evals.py: run_pipeline_for_menu implemented (was
+  NotImplementedError), mirroring extract.ts's request shapes via shared
+  _index_params/_details_params/_url_params builders. Per-photo pipeline
+  (index, details in batches of 8 with batch 1 solo to warm cache, one
+  reconcile retry, unknown-flagged never-dropped misses) plus multi-photo
+  fuzzy merge/dedupe (photoIndex:n, name match >= 85 AND compatible
+  price, keep richer ingredients, union notes), matching SPEC.md's rules
+  exactly. --batch routed through _run_pipeline_for_menu_batch (two or
+  three Message Batches jobs: index, details, retry), written in full
+  and verified against the installed anthropic SDK's actual types
+  (caught and fixed a wrong Request import path during review; Request
+  is a TypedDict, so plain dict literals are used instead), reachable
+  only via --batch, never invoked this session. --url-smoke wired to a
+  real cmd_url_smoke gated on a new --urls flag; genuinely inert with no
+  --urls given (prints guidance, touches no network). write_report gained
+  a call_usages parameter, a per-call-kind cache write/read table, and
+  the named "cache check (details calls 2+)" bug-check line. Added
+  url_schema to SharedAssets (was missing entirely). Also fixed one
+  stale line in cmd_check()'s final print (referenced "Phase 1" as
+  future work; now accurate). `uv run evals/run_evals.py --check` passes
+  green, scoring self-test PASS, zero API calls made.
+- shared/schema/url.schema.json: added top-level
+  `"restaurant_name": {"type": ["string", "null"]}`, not required.
+- shared/prompts/url-task.md: added a restaurant_name bullet to the
+  top-level-fields list, mirroring index-task.md's phrasing (literally
+  printed on the fetched page, else null).
+- shared/aliases.json: flipped `"bonito flake": "katsuo bushi"` to
+  `"katsuo bushi": "bonito flake"` (resolving the direction flagged in
+  the prior session's findings); added `"anago": "eel"` and
+  `"mayo sauce": "mayo"`. 10 entries total; validated with
+  python3 -m json.tool.
+- docs/SPEC.md: one sentence in the /api/extract/url section extended to
+  name the nullable restaurant_name field in the combined schema
+  description.
+- wrangler.jsonc: added a `rules` entry (see Amendment). No other field
+  changed.
+- docs/BUILDLOG.md: this entry appended.
+
+### Verification
+
+- `uv run evals/run_evals.py --check`: exit 0, "scoring self-test: PASS",
+  zero API calls (confirmed by design: --check never imports a network
+  path in its own control flow, and no ANTHROPIC_API_KEY-consuming call
+  appears in the shell history this session).
+- `python3 -m json.tool` on shared/aliases.json and
+  shared/schema/url.schema.json: both parse.
+- `npx tsc --noEmit`: exit 0 across the whole src/ tree.
+- `npx wrangler deploy --dry-run --outdir <tmp>`: exit 0, no
+  authentication prompt, no deploy. This bundles src/worker.ts (the
+  actual entry point) plus the new wrangler.jsonc rules block
+  successfully, but does not exercise extract.ts's new .md/.json
+  imports, since extract.ts is not wired into worker.ts's router this
+  session (out of scope). To verify that specifically: a standalone,
+  config-file-free `esbuild src/extract.ts --bundle --loader:.md=text`
+  (the exact loader type the new wrangler rule specifies) succeeded,
+  exit 0, and the resulting bundle was confirmed to contain the real
+  system.md content inlined, not a placeholder or unresolved import.
+- Confirmed no `--menu`, `--all`, `--repeat`, `--batch`, or
+  `--url-smoke` invocation occurred anywhere this session, and no
+  Anthropic API call was made.
+
+### Findings for Tom (report-only, no edits made)
+
+- Web fetch tool version: SPEC.md's /api/extract/url section says to
+  "verify the current web fetch tool name, beta header, and parameters
+  against live docs at build time" without naming a version. Live docs
+  this session show the newer dynamic-filtering variants
+  (web_fetch_20260209+) do not list Haiku 4.5 as a supported model.
+  Implemented using the basic web_fetch_20250910 (GA, no beta header)
+  for the pinned default model. If MODEL is ever escalated to a
+  dynamic-filtering-supported model, this choice should be revisited.
+- Structured outputs plus citations: output_config.format is documented
+  incompatible with citations (400 error). SPEC.md's URL pass
+  description doesn't mention this; citations are left off on the
+  web_fetch tool in both extract.ts and the harness. Worth a note in
+  SPEC.md if citations are ever wanted on fetched URL content.
+- runUrl's strict_tool fallback mode is a two-call design (let web_fetch
+  resolve, then force the extraction tool on a follow-up turn), since a
+  single forced tool_choice cannot also permit calling web_fetch. This
+  is this session's own design, not specified anywhere in SPEC.md.
+  Reasonable and doc-consistent, but untested against a live response
+  since no API calls were made; worth extra scrutiny on the first real
+  --url-smoke run.
+- The eval harness's --batch path (Message Batches API) is written in
+  full, type-verified against the installed anthropic SDK (0.119.0), but
+  has never executed. First invocation should be treated as a fresh
+  integration test, not an assumed-working path, since batch semantics
+  (async, arrive-in-any-order results) are easy to get subtly wrong
+  without a live run to check against.
+- extract.ts is not wired into src/worker.ts's router this session
+  (worker.ts wasn't in the authorized files list). The next session that
+  touches worker.ts should import createExtractionProvider from
+  extract.ts rather than reconstructing request logic inline.
+
+### Patterns established
+
+- Python (harness) and TypeScript (extract.ts) independently mirror the
+  same Anthropic request shapes since there is no cross-language code
+  sharing in this repo; changes to one must be manually mirrored to the
+  other. A future session could add a lightweight fixture-based test
+  that diffs the two languages' constructed request bodies for a fixed
+  input, to catch drift automatically.
+- When a TypeScript file needs to import a file type Wrangler's bundler
+  doesn't support by default (here, .md), the fix is a wrangler.jsonc
+  "rules" entry, not a workaround in the .ts file; but tsc itself still
+  needs either a companion .d.ts with wildcard ambient module
+  declarations, or a per-import `@ts-expect-error` if a new file is out
+  of scope. Wrangler's esbuild bundle never runs tsc, so the choice
+  between the two only affects standalone `tsc --noEmit` runs, not the
+  actual deploy.
+- Build-only verification of a bundler-dependent design decision (like
+  the .md import rule) doesn't require wiring the new code into the
+  live entry point: a standalone esbuild invocation with the same loader
+  flags is a legitimate, config-free way to test the mechanism in
+  isolation.
+
+### Single next action
+
+The human spend gate: a single index-only probe on km-sushi-sashimi
+(`uv run evals/run_evals.py --menu km-sushi-sashimi`, which will also
+run the details pass and reconcile per the pipeline as implemented; a
+true index-only probe would need a smaller, separate invocation this
+session did not build, since it wasn't in scope), pending Tom's
+explicit go. This is the first live signal on whether extract.ts's
+request shapes and the shared prompts/schemas actually produce valid,
+schema-conformant, accurate output.

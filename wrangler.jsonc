@@ -47,5 +47,13 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
-  }
+  },
+
+  // Amendment (2026-07-23, user-authorized): src/extract.ts imports the
+  // shared prompt files directly so shared/ stays the single source of
+  // truth. Wrangler's bundler has no default loader for .md, so this rule
+  // declares them as Text modules (verified against live Cloudflare docs).
+  "rules": [
+    { "type": "Text", "globs": ["shared/prompts/*.md"], "fallthrough": true }
+  ]
 }

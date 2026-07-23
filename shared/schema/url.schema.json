@@ -3,6 +3,7 @@
   "additionalProperties": false,
   "required": ["sections", "items"],
   "properties": {
+    "restaurant_name": { "type": ["string", "null"] },
     "sections": {
       "type": "array",
       "items": {
