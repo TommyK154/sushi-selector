@@ -575,3 +575,161 @@ session did not build, since it wasn't in scope), pending Tom's
 explicit go. This is the first live signal on whether extract.ts's
 request shapes and the shared prompts/schemas actually produce valid,
 schema-conformant, accurate output.
+
+## Session 2026-07-23: T-1.12 iteration r1, name-matching fixes over 5a59f68
+
+Base commit: 5a59f68 (Probe report: infrastructure validated, name
+matching issues identified)
+
+### Authorized scope (verbatim)
+
+SCOPE
+Task: T-1.12 iteration, round 1. Fix the two name-matching issues
+  surfaced by the 2026-07-23-probe report.
+Files:
+  - shared/prompts/system.md (primary, add naming rules)
+  - shared/prompts/index-task.md (if index-pass naming guidance needed)
+  - shared/prompts/details-task.md (if details-pass guidance needed)
+Not touching: extract.ts, run_evals.py, schemas, goldens, aliases.json
+Dependencies: probe report evals/reports/2026-07-23-probe.md (read for
+  context)
+Done when:
+  1. system.md instructs the model to use the primary English name
+     only, placing parenthetical Japanese/alternate names in notes.
+  2. system.md instructs the model that description lines under combo
+     or set items are part of that item (notes or ingredients), not
+     separate items.
+  3. uv run evals/run_evals.py --menu km-sushi-sashimi --timestamp
+     2026-07-23-r1 shows improved recall and precision on this menu.
+  4. Commit the prompt change and the new report together.
+Priority: name-convention rules only; do not tune other aspects yet.
+
+### Pre-flight
+
+1. Working tree clean at 5a59f68. Pass.
+2. The three named prompt files all present and readable. Pass.
+3. Probe report evals/reports/2026-07-23-probe.md present, read for
+   context (item_recall 0.50, item_precision 0.40, both failing the
+   0.97 gate; ingredient_f1_macro and price_accuracy both 1.00). Pass.
+
+### Root cause (read-only investigation, verified against source)
+
+Two distinct causes behind the probe's 15 pred vs. 12 gold on
+km-sushi-sashimi, both confirmed by tracing evals/run_evals.py:
+
+- Parentheticals left in `name` (`TUNA BELLY (MAGURO TORO)`, `SPANISH
+  MACKEREL (AJI)`, `LIVE-SWEET SHRIMP (AMAEBI)`, `SPECIAL A (20PCS)`).
+  `normalize_name` in run_evals.py only lowercases and collapses
+  whitespace, no parenthetical stripping, and `match_items` requires
+  `token_sort_ratio >= 85`; a trailing parenthetical is enough to drop
+  a true match below threshold, so the dish counts as both a MISSED
+  golden and an EXTRA predicted item.
+- Combo contents lines (the "3pcs Each of Assorted Sashimi w/..." text
+  under Special A/B/C) emitted as their own items instead of folded
+  into the named item above them, per the golden's shape.
+- Architectural constraint that shaped the fix: `_merge_details_into_index`
+  in run_evals.py takes `name` from the index pass only, overwriting
+  just ingredients/wrap/is_raw/notes from the details pass. The index
+  schema has no `notes` field. So the parenthetical must be dropped in
+  the index pass and can only be recorded in the details pass's notes;
+  this drove where each instruction was placed in the fix below.
+
+### Manifest (files touched)
+
+- shared/prompts/system.md: added a new "Item names" section (after
+  "Reading the photo", before "Ingredient naming") instructing that
+  `name` is the primary English name only, with parenthetical
+  Japanese/alternate names and piece-count qualifiers dropped and moved
+  to notes, plus the reasoning about the evaluation set's name-match
+  threshold. Augmented "Combo and choice-set items" with a paragraph
+  stating that a contents/description line printed beneath a named
+  combo or set item is part of that item, not a separate item, and
+  must never get its own `n`.
+- shared/prompts/index-task.md: replaced the `name` bullet (was "the
+  item name as printed", which directly contradicted the fix) with the
+  primary-English-name instruction; added a sentence to the reading
+  guidance that a combo/set description line underneath an item is
+  part of that item, not a separate entry.
+- shared/prompts/details-task.md: extended the `notes` bullet to state
+  that notes is also where the parenthetical alternate name and the
+  combo contents line (pulled out of `name` and out of the index pass)
+  get recorded; added a one-line clarifier to the `name` bullet not to
+  re-add a parenthetical.
+- evals/reports/2026-07-23-r1.md: new eval report from this session's
+  verification run.
+- docs/BUILDLOG.md: this entry appended.
+
+### Verification
+
+- Confirmed via grep: zero em dashes across all three edited prompt
+  files.
+- Re-read all three files in full for internal consistency (each task
+  file's bullets reference the style guide section they draw from; the
+  index/details split is stated consistently in both directions).
+- Ran (credit-spend gate confirmed with Tom first, via AskUserQuestion,
+  before executing): `uv run evals/run_evals.py --menu km-sushi-sashimi
+  --timestamp 2026-07-23-r1`. Result, evals/reports/2026-07-23-r1.md:
+  - item_recall: 0.50 to 1.00 (gate >= 0.97, PASS)
+  - item_precision: 0.40 to 1.00 (gate >= 0.97, PASS)
+  - price_accuracy: 1.00, unchanged (PASS)
+  - pred/gold item counts: 15/12 to 12/12, exact match
+  - ingredient_f1_macro: 1.00 to 0.7946 (gate >= 0.90, now FAILS; see
+    Findings below, not fixed this session, out of scope)
+  - overall GATES line: FAIL (solely on the ingredient gate above; every
+    gate this task's Done-when list named is met)
+
+### Findings for Tom (report-only, no edits made)
+
+- ingredient_f1_macro regressed from 1.00 (probe) to 0.7946 (this run),
+  now failing its 0.90 gate. This is not a regression this session's
+  edits caused directly: it is newly visible because the five items now
+  correctly matching (Special A, Special B, Special C, Japanese Sea
+  Bream, Live-Sweet Shrimp) previously scored no ingredient F1 at all
+  (they were unmatched in the probe, so their ingredient sets were never
+  compared). Two distinct pre-existing gaps are exposed, per the new
+  run's diffs:
+  - `ebi` is predicted where gold says `shrimp` (Special A, B, C all
+    show this exact missing/extra pair). This looks like an
+    aliases.json gap (no `ebi` to `shrimp` entry), which this round's
+    scope explicitly excludes from editing.
+  - `japanese sea bream` and `live-sweet shrimp` are predicted where
+    gold says `sea bream` and `sweet shrimp` (the item's own printed
+    species/state qualifier is not being stripped from the ingredient
+    the way system.md's existing rules strip other qualifiers). This
+    looks like a system.md ingredient-naming rule gap, distinct from
+    the naming-convention fix this round was scoped to, and from the
+    "species qualifiers stay local to the item" rule already in the
+    style guide (that rule is about not importing a qualifier from a
+    different item, not about stripping the item's own printed one).
+  Per this round's Priority line ("name-convention rules only; do not
+  tune other aspects yet") and the Not-touching list (aliases.json,
+  schemas), neither was touched this session. Flagging both as
+  candidates for the next iteration round, pending Tom's prioritization
+  and an explicit go on which one (or both) to take on next, and on
+  whether the fix belongs in aliases.json, system.md, or both.
+
+### Patterns established
+
+- In this repo's two-pass extraction pipeline, `name` is fixed by the
+  index pass and never overwritten by the details pass merge; any fix
+  that changes what ends up in the final `name` must be made in
+  index-task.md's instructions (and system.md's shared rule), not
+  details-task.md, even though details-task.md is where `notes` (a
+  details-only field) gets populated. A naming-convention fix that
+  needs both a name change and a notes addition necessarily touches
+  both task files plus system.md.
+- Fixing item-count/name-matching gates can expose previously-invisible
+  ingredient-content gaps, since ingredient F1 is only ever computed on
+  matched pairs: a matching fix and an ingredient-accuracy fix are not
+  independent from the gate's perspective, even though they are
+  independent from a scope perspective. Expect this pattern again on
+  future name-matching rounds against other menus.
+
+### Single next action
+
+Tom's prioritization call on the newly-exposed ingredient_f1_macro
+failure (0.7946, gate >= 0.90): whether to run a round 2 iteration now
+on the `ebi` to `shrimp` alias gap and the sea-bream/sweet-shrimp
+species-qualifier-stripping gap identified above, or hold this menu at
+its current recall/precision win and prioritize a different menu or
+task next.

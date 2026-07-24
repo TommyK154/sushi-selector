@@ -22,7 +22,11 @@ Produce a single JSON object that validates against
   - `n`: a 1-based reading-order index. Assign this carefully and stably; the
     details pass will reference items by this same number against this same
     photo, so it must not shift between passes.
-  - `name`: the item name as printed.
+  - `name`: the item's primary English name, per the style guide's Item names
+    rule. Drop any parenthetical Japanese or alternate name and any
+    parenthetical piece count or size qualifier from `name`; the details pass
+    is where those get recorded, so this pass reports nothing else about
+    them.
   - `section`: the name of the section this item falls under (matching one
     of the strings in `sections`), or `null` if the item is not under any
     printed section header.
@@ -34,5 +38,8 @@ Produce a single JSON object that validates against
 Follow the reading-order and legibility guidance in the system prompt: read
 around glare, rotation, and lamination artifacts rather than skipping
 sections, and never guess a price or name that cannot actually be read. Skip
-beverage-only lines entirely, per the style guide. Return only the JSON
-object, no commentary, no markdown fences.
+beverage-only lines entirely, per the style guide. A smaller description or
+contents line printed beneath a named combo or set item is part of that item,
+not a separate item; do not give it its own `n` or report it as its own
+entry, per the style guide's combo and choice-set section. Return only the
+JSON object, no commentary, no markdown fences.

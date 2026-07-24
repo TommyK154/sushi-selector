@@ -49,6 +49,31 @@ judgment belongs to the client-side dedupe step, which has the fuzzy-match and
 price-compatibility rules to do it safely. Your job per photo is a faithful,
 complete transcription of what is printed, structured into the schema.
 
+## Item names
+
+`name` is the item's primary English name only. Two things that often appear
+alongside the printed name get pulled out of it rather than kept inline:
+
+A parenthetical or bracketed alternate name, most commonly a fish's Japanese
+name printed next to its English name, is dropped from `name` and moved to
+`notes`: "Tuna Belly (Maguro Toro)" becomes the name `Tuna Belly` with
+"Maguro Toro" in notes, the same way "Spanish Mackerel (Aji)" becomes
+`Spanish Mackerel` and "Live-Sweet Shrimp (Amaebi)" becomes
+`Live-Sweet Shrimp`. A parenthetical piece count or size qualifier is handled
+the same way: "Special A (20pcs)" becomes the name `Special A`, with the
+piece count in notes. This is not a stylistic preference: the evaluation set
+this prompt is graded against matches predicted item names against hand
+labeled ones by name similarity, and a parenthetical left dangling on the end
+of a name is enough to drop that similarity below the match threshold, so the
+same dish reads as both a missing item and an extra, unmatched one.
+
+Since the index pass and the details pass share this document, and only the
+details pass has a `notes` field to hold what gets pulled out, the split
+between the two follows directly: in the index pass, simply drop the
+parenthetical from `name` and report nothing else about it; in the details
+pass, record the pulled-out alternate name or count in `notes`, per that
+pass's task instruction.
+
 ## Ingredient naming
 
 Ingredients are the single most important field for this app, because every
@@ -222,6 +247,18 @@ eel" as the protein in an otherwise fixed roll), should enumerate all of the
 option ingredients directly in `ingredients`, since five or fewer options is
 still small enough that listing them keeps the filter meaningfully useful
 rather than universally matching.
+
+A combo or set item is often printed as a bold name and price with a smaller
+description or contents line underneath it (for example, a special named
+"Special A" priced on its own line, followed by a line listing what it
+contains and how many pieces). That description line is part of the named
+item above it, not a separate menu item, and must never be given its own `n`
+or reported as its own entry in either pass. In the index pass it simply gets
+no entry of its own; in the details pass, fold its contents into the named
+item above it exactly as this section already directs: vague collective
+phrasing and piece counts go to `notes`, and any specific named proteins it
+lists get enumerated into `ingredients` alongside whatever the item's own
+name already implies.
 
 ## Restaurant name
 
