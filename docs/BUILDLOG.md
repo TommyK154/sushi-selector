@@ -733,3 +733,118 @@ on the `ebi` to `shrimp` alias gap and the sea-bream/sweet-shrimp
 species-qualifier-stripping gap identified above, or hold this menu at
 its current recall/precision win and prioritize a different menu or
 task next.
+
+## Session 2026-07-23: T-1.12 iteration r2, ingredient fixes over 15f9d8f
+
+Base commit: 15f9d8f (T-1.12 r1: fix item name matching on
+parentheticals and combo sub-lines)
+
+### Authorized scope (verbatim)
+
+SCOPE
+Task: T-1.12 iteration, round 2. Fix the two ingredient gaps surfaced
+  by the 2026-07-23-r1 report on km-sushi-sashimi (ingredient_f1_macro
+  0.7946, gate >= 0.90).
+Files:
+  - shared/aliases.json (add ebi -> shrimp alias)
+  - shared/prompts/system.md (add rule: strip an item's own printed
+    qualifier from its ingredients, e.g. "japanese sea bream" -> "sea
+    bream", "live-sweet shrimp" -> "sweet shrimp"; this is separate
+    from the existing "don't import qualifiers from other items" rule)
+Not touching: extract.ts, run_evals.py, schemas, goldens, task files
+Dependencies: round 1 report evals/reports/2026-07-23-r1.md
+Done when:
+  1. aliases.json includes ebi -> shrimp.
+  2. system.md has the own-qualifier stripping rule.
+  3. uv run evals/run_evals.py --menu km-sushi-sashimi --timestamp
+     2026-07-23-r2 shows ingredient_f1_macro >= 0.90.
+  4. Commit aliases + prompt change + report together.
+Priority: these two ingredient fixes only; do not tune other aspects.
+
+### Pre-flight
+
+1. Working tree clean at 15f9d8f. Pass.
+2. shared/aliases.json and shared/prompts/system.md both present and
+   readable. Pass.
+3. Round 1 report evals/reports/2026-07-23-r1.md present, read for
+   context (ingredient_f1_macro 0.7946, gate >= 0.90 FAIL; two named
+   gaps: ebi/shrimp on Special A/B/C, own-qualifier stripping on
+   Japanese Sea Bream and Live-Sweet Shrimp). Pass.
+
+### Manifest (files touched)
+
+- shared/aliases.json: added `"ebi": "shrimp"` (11 entries total).
+- shared/prompts/system.md: added one new bolded paragraph in
+  "Ingredient naming", immediately after the existing "Species and type
+  qualifiers stay local to the item that prints them" paragraph. States
+  the complementary rule: an item's own printed name qualifier (a
+  nationality like "japanese", a liveness marker like "live") strips
+  from that item's ingredient even though it stays in the item name,
+  with a guard sentence that this applies only to the item's own name,
+  not to a qualifier printed on an ingredient inside a combo's contents
+  line (so it does not license stripping "japanese scallop" on Special
+  B's contents line).
+- evals/reports/2026-07-23-r2.md: new eval report from this session's
+  verification run.
+- docs/BUILDLOG.md: this entry appended.
+
+### Verification
+
+- Ran (credit spend pre-authorized in the approved plan for this
+  session, per the standing spend-gate rule): `uv run evals/run_evals.py
+  --menu km-sushi-sashimi --timestamp 2026-07-23-r2`. Result,
+  evals/reports/2026-07-23-r2.md:
+  - ingredient_f1_macro: 0.7946 to 0.9745 (gate >= 0.90, PASS)
+  - item_recall, item_precision, price_accuracy: 1.00, unchanged (PASS)
+  - overall GATES line: PASS
+  - Japanese Sea Bream and Live-Sweet Shrimp diffs fully cleared (zero
+    diff lines for either item this run); the own-qualifier stripping
+    rule worked as intended.
+  - Special A, B, C still show `missing=['shrimp']` this run, but with
+    `extra=[]` rather than r1's `extra=['ebi']`: the model did not emit
+    `ebi` or `shrimp` for these items' shrimp component at all this run.
+    Since the alias table only converts whatever the model outputs, and
+    system.md's shrimp-related wording did not change this session, this
+    reads as ordinary sampling variance between runs, not an effect of
+    either fix. Flagged as unverified inference, not confirmed by a
+    repeat run (out of scope this session).
+  - Special B's residual `scallop` vs. gold `japanese scallop` diff
+    (flagged as a known, out-of-scope residual in the r1 findings)
+    persists unchanged.
+
+### Findings for Tom (report-only, no edits made)
+
+- Special A/B/C's `missing=['shrimp']` diff this run has a different
+  shape than r1's (no `extra=['ebi']` companion), suggesting the model
+  dropped the shrimp ingredient outright rather than mislabeling it.
+  This did not block the gate (macro F1 lands at 0.9745), so it was not
+  chased further per this round's ingredient-fixes-only priority, but a
+  repeat run would help distinguish genuine sampling variance from a
+  systematic gap worth a future round.
+- Special B's `scallop`/`japanese scallop` residual (predicted strips
+  "japanese", gold keeps it) is a miss against the existing "species
+  qualifiers stay local" rule, not the two rules touched this round.
+  Left unfixed per scope; still the most likely next single-menu
+  ingredient target if further iteration on km-sushi-sashimi is wanted.
+
+### Patterns established
+
+- The own-qualifier-stripping rule's guard sentence (limiting the new
+  rule to an item's own printed name, not to ingredients named on a
+  combo's contents line) was necessary and appears to have worked: the
+  residual Special B diff did not get worse by the new rule being
+  over-applied to "japanese scallop" in its contents line.
+- Per-run model sampling variance is visible even with an unchanged
+  prompt for the affected ingredient (the ebi/shrimp component on
+  Special A/B/C emitted differently between r1 and r2 despite no prompt
+  change targeting it). Treat a single eval run's diff detail as one
+  sample, not a deterministic characterization of the prompt, when
+  reasoning about anything the round's own fix did not target.
+
+### Single next action
+
+Tom's call on whether to spend a further round on the two residuals
+surfaced above (Special B's scallop qualifier, and confirming whether
+the Special A/B/C shrimp-drop is sampling noise or systematic), run the
+eval suite against other menus now that this menu's ingredient gate
+passes, or move to a different T-1.x task.

@@ -169,6 +169,23 @@ it. Unifying variants like "freshwater eel" and plain "eel" into one filter
 facet is a job for the deterministic alias table on the client, applied after
 extraction, not something to pre-resolve yourself during labeling.
 
+**An item's own printed name qualifier strips from that item's
+ingredient, the complement to the rule just above.** The rule above
+keeps you from importing a qualifier from a different item. This one
+covers the qualifier printed on the item in front of you: when the dish
+is essentially one fish and its own printed name carries a leading
+qualifier (a nationality like "japanese," a liveness marker like
+"live"), that qualifier strips out of the ingredient even though it
+stays in the item name. The item "Japanese Sea Bream" has the single
+ingredient `sea bream`, and "Live-Sweet Shrimp" has the single
+ingredient `sweet shrimp` (the "live" strips out, the species term
+"sweet shrimp" stays). This applies only to the qualifier printed in
+this specific item's own name. A qualifier printed on an ingredient
+inside a combo's contents line (for example a "japanese scallop" listed
+among the contents of "Special B") is that ingredient's own printed
+text and stays exactly as printed, since it is not the item's name
+qualifier.
+
 **Vague collective terms belong in notes, never in the ingredients array.**
 Terms like "various vegetables," "assorted sashimi," "seafood," and "japanese
 vegetable" carry zero filtering signal (a diner cannot filter for "various"),
