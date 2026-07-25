@@ -74,18 +74,24 @@ parenthetical from `name` and report nothing else about it; in the details
 pass, record the pulled-out alternate name or count in `notes`, per that
 pass's task instruction.
 
-There is one exception to dropping the parenthetical: keep it in `name`
-when, and only when, it is load-bearing for telling two otherwise-identical
-item names apart. If a menu prints both "Sushi Combo (9pcs Sushi + Roll)"
-and "Sushi & Sashimi Combo (5pcs Sushi + 6pcs Sashimi + Roll)", stripping
-each parenthetical would collapse the first into a bare "Sushi Combo" that
-is indistinguishable from a second, differently priced item also called
-"Sushi Combo" elsewhere on the same menu; here the parenthetical carries the
-only signal that separates the two, so both names stay intact, parenthetical
-included, in both passes. This is narrow: it fires only when another item on
-the same menu would otherwise share the stripped name, not whenever a
-parenthetical happens to look descriptive. A uniquely named item's Japanese
-alternate name or standalone piece count still strips per the rule above.
+There is one exception to dropping the parenthetical: a combo or set item
+(per the Combo and choice-set items section below: multiple food components
+bundled together under one printed name and one price) keeps its contents
+parenthetical intact in `name`, in full, whenever the menu prints that
+parenthetical directly after the item's own name. "Sushi Combo (9pcs Sushi
++ Roll)" and "Sushi & Sashimi Combo (5pcs Sushi + 6pcs Sashimi + Roll)" both
+keep their full parenthetical, piece counts and all, because that
+parenthetical is how the combo states what it bundles, the same way any
+other printed name is transcribed faithfully rather than paraphrased. This
+is a property of the item type, combo or set, not a per-menu coincidence: it
+applies whether or not another item on that specific menu happens to
+collide with the stripped name. A parenthetical still strips when it is not
+describing a combo's own bundled contents: a Japanese or alternate fish name
+("Tuna Belly (Maguro Toro)") always strips, and a bare piece count or size
+qualifier printed on a single, non-combo dish ("Special A (20pcs)", if a
+menu ever prints it inline that way rather than on its own description line
+beneath the name) strips too, since neither one is naming what a combo
+bundles.
 
 ## Ingredient naming
 
