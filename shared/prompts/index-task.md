@@ -26,7 +26,9 @@ Produce a single JSON object that validates against
     rule. Drop any parenthetical Japanese or alternate name and any
     parenthetical piece count or size qualifier from `name`; the details pass
     is where those get recorded, so this pass reports nothing else about
-    them.
+    them. Exception: keep the parenthetical in `name` when dropping it would
+    make this item's name identical to a different item's name elsewhere on
+    the same page, per the style guide's disambiguation exception.
   - `section`: the name of the section this item falls under (matching one
     of the strings in `sections`), or `null` if the item is not under any
     printed section header.

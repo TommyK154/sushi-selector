@@ -74,6 +74,19 @@ parenthetical from `name` and report nothing else about it; in the details
 pass, record the pulled-out alternate name or count in `notes`, per that
 pass's task instruction.
 
+There is one exception to dropping the parenthetical: keep it in `name`
+when, and only when, it is load-bearing for telling two otherwise-identical
+item names apart. If a menu prints both "Sushi Combo (9pcs Sushi + Roll)"
+and "Sushi & Sashimi Combo (5pcs Sushi + 6pcs Sashimi + Roll)", stripping
+each parenthetical would collapse the first into a bare "Sushi Combo" that
+is indistinguishable from a second, differently priced item also called
+"Sushi Combo" elsewhere on the same menu; here the parenthetical carries the
+only signal that separates the two, so both names stay intact, parenthetical
+included, in both passes. This is narrow: it fires only when another item on
+the same menu would otherwise share the stripped name, not whenever a
+parenthetical happens to look descriptive. A uniquely named item's Japanese
+alternate name or standalone piece count still strips per the rule above.
+
 ## Ingredient naming
 
 Ingredients are the single most important field for this app, because every
@@ -101,9 +114,17 @@ would silently corrupt the raw/cooked signal for that item.
 **Preparation methods strip from ingredient names, with a closed exception
 list.** Most preparation-method words describing how a filling was cooked
 strip away, leaving the base ingredient: "chopped scallop" becomes `scallop`,
-"deep fried eel" becomes `eel`, "deep fried tofu" becomes `tofu`. This keeps
-the filter facets clean, since a diner filtering for "scallop" wants every
-scallop dish regardless of how each one was diced or cooked. There is a
+"deep fried eel" becomes `eel`, "deep fried tofu" becomes `tofu`. The same
+stripping applies however many words the preparation method takes and
+whatever base ingredient it modifies, including compound and multi-word
+bases: "deep fried soft shell crab" becomes `soft shell crab` (only "deep
+fried" strips; "soft shell" is part of the ingredient type, not a
+preparation word), "chopped spicy salmon" becomes `spicy salmon` (only
+"chopped" strips; "spicy salmon" is the locked compound ingredient from the
+rule above), "sauteed steak" becomes `steak`, "sliced jalapeno" becomes
+`jalapeno`, and "baked salmon" becomes `salmon`. This keeps the filter facets
+clean, since a diner filtering for "scallop" wants every scallop dish
+regardless of how each one was diced or cooked. There is a
 closed, explicit list of exceptions where the preparation word does not
 strip, currently exactly four: `pickle` (never folded into "cucumber", even
 when the pickle is cucumber-based), `mayo` (preferred spelling over "mayo
@@ -239,11 +260,22 @@ convention and makes the item `false`.
 string as printed, kept even when it is not a clean number. When a menu
 prints "MP" or "Market Price" instead of a number, set `price: null` and
 `price_text: "MP"` (or whatever the menu literally printed) rather than
-guessing a typical market rate. When an item's only printed price is a combo
-price (for example, a two-item combo listed at one combined price with no
-per-item breakdown available), keep that combo price on the item rather than
-attempting to split or estimate an individual price. Never let a price field
-express more certainty than the menu actually printed.
+guessing a typical market rate. Never let a price field express more
+certainty than the menu actually printed.
+
+When a single printed price covers multiple items in a set rather than one
+item alone (for example "2 for 17.50" printed once for a pair of
+teriyaki-plate choices, with no per-item breakdown available), that number is
+not this item's price: set `price: null` and put the verbatim text in
+`price_text` exactly as printed, "2 for 17.50" included. Do not divide the
+combined number in half or otherwise compute a per-item figure; the menu did
+not print one, so inventing one overstates certainty the same way a guessed
+market price would. The same treatment applies to an upcharge modifier that
+is the only price printed for an item, such as "+1" or "+2" marking a
+premium add-on to a base price stated elsewhere: `price: null`,
+`price_text` carries the modifier text verbatim ("+1", "+2"). Only assign a
+numeric `price` when the menu prints one clean, standalone number that
+belongs to this item alone.
 
 ## Combo and choice-set items
 
