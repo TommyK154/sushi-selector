@@ -161,6 +161,50 @@ predictions and goldens align:
   crab, avocado, cucumber`. The whole-list form, `INFERRED ingredients`, is
   reserved for items where every ingredient was inferred.
 
+## Sidecar and vocabulary conventions
+
+Two files support the offline lint in `uv run evals/run_evals.py --check`
+(seven asserts, A through G, none of them make an API call). Both are eval
+harness metadata, hand maintained, never derived from `golden.json`.
+
+**`sections.json`**, one optional sidecar per menu at
+`evals/menus/<slug>/sections.json`. Hand written by counting the printed
+photo, section by section, section name and item count, before the golden is
+scored against it. Deriving it from `golden.json` instead would make assert C
+circular (the golden checking itself), so this repo does not do that.
+`--emit-manifest-skeleton <slug> [--out <path>]` writes an empty skeleton to
+fill in by hand; it refuses to overwrite an existing file and never opens
+`golden.json`. Shape:
+
+```json
+{
+  "_comment": "Hand written from the printed menu page...",
+  "sections": [
+    {"section": "Sushi", "expected_count": 23}
+  ],
+  "provenance": {
+    "counted_by": null,
+    "counted_on": null,
+    "source_photo": null
+  }
+}
+```
+
+When the sidecar is absent, assert C SKIPs that menu and says so; it is not
+required, and no golden.json's section counts are checked against anything
+until its sidecar is written by hand.
+
+**`accepted_vocabulary.json`**, at `evals/accepted_vocabulary.json`, one file
+for the whole golden set. It is a floor, not a truth: the union of every
+ingredient string that appeared in a golden as of the session that seeded it,
+sorted, deduped, stored verbatim (not run through `normalize_ingredient`).
+Assert E normalizes both the ingredient under test and each vocabulary entry
+at lookup time, through the same `normalize_ingredient(x, aliases)` the
+scoring layer uses, so the file stays reviewable as plain printed strings
+rather than as folded or aliased forms. It only catches strings that appear
+after it was seeded; a genuinely new ingredient still needs a human to decide
+whether it belongs in `shared/aliases.json` or in this file.
+
 ## Status
 
 Nine eval menus, all with hand-labeled goldens. The three specialty-roll pages

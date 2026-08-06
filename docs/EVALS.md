@@ -84,6 +84,46 @@ the model per SPEC.md and record the decision and cost delta in the report.
   $0.50 with caching, and half that with --batch. The tuning loop is designed
   to fit comfortably inside the $5 workspace cap alongside real usage.
 
+### Offline golden lint (`--check`)
+
+`--check` makes zero API calls and needs no `ANTHROPIC_API_KEY`; it is safe to
+run any time. Beyond loading shared assets and discovering menus, it runs
+seven asserts (A through G) against every `golden.json`, bounding the class of
+mechanical error that is otherwise invisible until it shows up as a scoring
+artifact in a run that costs credits. `--check --menu <slug>` narrows the lint
+step to one menu; discovery and the raw-photo count above it stay unconditional.
+`--emit-manifest-skeleton <slug> [--out <path>]` writes an empty
+`sections.json` skeleton (see `evals/menus/README.md`), refuses to overwrite an
+existing file, and never opens `golden.json`.
+
+Goldens are human owned. A lint finding is reported for hand correction, never
+auto-fixed by the harness.
+
+| Assert | Checks | Severity |
+|---|---|---|
+| A | no confidence or inference token (`INFERRED`, `LOW`, `MED`, `HIGH`) outside `notes` | ERROR |
+| B | `n` values are contiguous from 1, no gaps, no duplicates | ERROR |
+| C | item counts and section name/order match the hand-written `sections.json` sidecar, when one exists | ERROR when present, SKIP when the sidecar is absent |
+| D | `price_text` present; non-null `price` agrees with the number `price_text` parses to; no negative or zero price | ERROR |
+| D | a null `price` whose `price_text` parses to exactly one number | WARN |
+| D | adjacent items in the same section sharing a price, collapsed into runs (length-2 pairs reported first as the carry-down/transposition suspect, length-3+ runs reported after as informational) | WARN |
+| D | adjacent-column price signature | SKIP always; these goldens carry no column data to check against |
+| E | every ingredient string resolves in `shared/aliases.json` or `evals/accepted_vocabulary.json`, both sides normalized through `normalize_ingredient` at lookup time | ERROR |
+| F | romaji present in `name` or `notes` (structured `romaji: X` or bare prose, case insensitive) for items in a Sushi or Sashimi section | WARN, reported once per menu as missing-over-applicable, never gating |
+| G | each item validates against the item schema composed from `shared/schema/index.schema.json` union `details.schema.json` (proven equal to `url.schema.json`'s item subschema by a self-test on every run); `wrap` is in the closed enum; `is_raw` is `true`, `false`, or `null` | ERROR |
+
+Exit code: `1` if any assert produced an ERROR anywhere in the lint menus,
+`0` when only WARN and SKIP findings exist. Every `--check` run also executes
+`_lint_self_test`, a synthetic in-memory fixture per assert that proves each
+one fires (and, where amended, does not fire where it should not); no repo
+golden is ever used as a fixture.
+
+Assert F is a completeness survey feeding a future romaji convention
+decision, not a defect list: it cannot distinguish a drafter omission from a
+menu that genuinely never printed romaji, and its current detector and
+lexicon are known to be incomplete (see `docs/BUILDLOG.md`'s P1-SB entries for
+the measured gaps). Its WARN count is a lower bound, not a measurement.
+
 ## Tom's photo collection guidance
 
 6 to 10 menus, shot like a normal impatient human at a table, not a

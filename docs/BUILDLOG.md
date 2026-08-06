@@ -1507,3 +1507,307 @@ reconciling, and where; (3) whether the personal-name-to-"the
 reviewer" rename should extend to any of the other docs/ files or
 shared/prompts/system.md, flagged here for session C since system.md
 is outside this session's Files list.
+
+## Session 2026-08-05: P1-SB continuation after transport failure, over b6f36cf
+
+Base commit: b6f36cfa03869afcb6e15e539fb8725d0036822a (unchanged; nothing
+was committed by the prior session)
+
+### Transport failure and inheritance re-proof (card-mandated)
+
+A prior session working this same build card died mid-turn on a connection
+failure. Nothing was committed. Its uncommitted work (a 725-line addition to
+`evals/run_evals.py` and a new `evals/accepted_vocabulary.json`) was left on
+disk in the working tree. Per this session's binding inheritance rule, that
+prior session's account of what it completed was treated as unreliable and
+not cited; every item below was re-proven inside this session with command
+output, not read off the plan file's claims.
+
+### Authorized scope (verbatim build card)
+
+Zero spend, no API calls, no network. Re-prove the pre-flight and the
+inherited lint code (asserts A through G, T3-1, T3-2), then finish four
+proofs the prior session never produced (T3-2 byte-identical, raw drop
+folder order, synthetic 1/2/10 case, exit code 1), investigate and explain
+an assert F delta without changing assert F, write two doc sections
+(`evals/menus/README.md` sidecar/vocabulary conventions, `docs/EVALS.md`
+harness lint section), write this BUILDLOG entry, and commit (never push).
+Not touching: any `golden.json`, `shared/*`, `normalize_ingredient` and all
+scoring/matching/merge/dedupe/gate logic, `src/*`, `docs/SPEC.md`,
+`PLAN.yaml`, `.dev.vars`, `.envrc`, wrangler config, existing
+`evals/reports/*`. No environment variable unset, exported, or modified
+beyond the single mandated `env -u ANTHROPIC_API_KEY` invocation.
+
+Three amendments were authorized mid-session, after the plan was approved
+and before any doc text was written, folded in below as amendments 6-8
+alongside the five amendments the prior session's plan had already recorded
+(1-5, reconfirmed against the code on disk, not re-litigated).
+
+### Pre-flight (all five re-run this session, command output produced, not cited)
+
+1. `git rev-parse HEAD` = `b6f36cfa03869afcb6e15e539fb8725d0036822a`. Pass.
+2. `git status --porcelain`: exactly ` M evals/run_evals.py` and
+   `?? evals/accepted_vocabulary.json`. `git diff --stat` confirms
+   `1 file changed, 725 insertions(+), 7 deletions(-)`. No `golden.json`
+   modified, no `sections.json` under `evals/menus/` anywhere. Pass.
+3. Inherited lint code read in full (`evals/run_evals.py` lines 196-744 and
+   1439-1656) before any change was made. Pass.
+4. `_lint_self_test` (lines 1537-1655) read line by line: every assert A
+   through G has at least one negative fixture, and the two amended asserts
+   (D, G) additionally carry a positive regression guard. **The PASS line's
+   claim was TRUE as inherited; no fixture was missing.** See closing report
+   item 7 for the full per-assert table.
+5. `find` swept for scratch/fixture directories inside the repo: none found
+   beyond the pre-existing, gitignored `evals/__pycache__/`. Pass.
+
+### Manifest (files touched)
+
+- `evals/run_evals.py`: inherited from the prior session's uncommitted work,
+  re-proven this session, **unchanged by this session** (no proof failed, so
+  no code edit was needed).
+- `evals/accepted_vocabulary.json`: inherited, unchanged, 153 verbatim
+  ingredient strings, sorted, deduped, with the amendment-3 `_comment`.
+- `evals/menus/README.md`: new `## Sidecar and vocabulary conventions`
+  section added before `## Status`.
+- `docs/EVALS.md`: `## Harness (evals/run_evals.py)` extended with a new
+  `### Offline golden lint (--check)` subsection.
+- `docs/BUILDLOG.md`: this entry.
+
+### Card amendments 1 through 5 (from the prior session's plan, verbatim,
+reconfirmed against the code on disk this session, not re-litigated)
+
+**Amendment 1, assert G.** Original card wording: "wrap values are inside
+the enum, and is_raw is boolean." Amended: `is_raw` in `{true, false,
+null}`, where `null` carries the README meaning "not determinable" and is
+valid. Cause: card-asserted as *card defect caught in plan mode*, the
+original would ERROR on three correct, human-verified goldens
+(`km-sushi-lunch` n:4, `masa-sushi` n:9, n:10). Confirmed implemented at
+`_composed_item_schema` (`is_raw` typed `["boolean", "null"]`) with a
+regression guard in `_lint_self_test` at line 1652 (`is_raw=None` must not
+fire).
+
+**Amendment 2, assert F.** Original: "Romaji present on items in Sushi and
+Sashimi sections." Amended: WARN, never ERROR, never gating; detect romaji
+across `name` AND `notes`, case insensitive, accepting both the structured
+`romaji: X` form and bare prose; WARN when absent, reported per menu not
+per item. Cause: card-asserted, no locked convention exists for how romaji
+is recorded and the goldens use three different forms. Confirmed
+implemented at `_assert_f_romaji` (lines 651-680) and `ROMAJI_LEXICON`
+(line 280).
+
+**Amendment 3, vocabulary file stores raw strings.** Original mandate: seed
+`accepted_vocabulary.json` through `normalize_ingredient`. Amended: the
+file stores 153 verbatim ingredient strings, sorted, deduped, unnormalized
+at write time; assert E normalizes both the ingredient under test and each
+vocabulary entry at lookup time. Cause: card-asserted, `normalize_ingredient`'s
+plural fold turns `asparagus` into `asparagu` and `octopus` into `octopu`;
+committing folded forms into a reviewer artifact would look like a
+golden-set defect when it is a `normalize_ingredient` defect. Confirmed
+implemented at `load_accepted_vocabulary` (line 308) and `_assert_e_vocabulary`
+(line 634); confirmed by direct call this session,
+`normalize_ingredient("asparagus", {})` -> `"asparagu"`,
+`normalize_ingredient("octopus", {})` -> `"octopu"`.
+
+**Amendment 4, assert D null price is WARN not ERROR.** Amended: when
+`price` is null, parse `price_text` for a single unambiguous number; if
+found, WARN (never ERROR). Cause: card-asserted, correct goldens legitimately
+carry a null `price` with a combo or market-price `price_text`. Measured
+this session (`uv run --no-project python`, direct scan of all 10
+`golden.json`): **54 items** carry `price: null`
+(`km-sushi-dinner` 15, `km-sushi-lunch` 15, `km-sushi-noodles-kitchen` 1,
+`km-sushi-sashimi` 4, `masa-sushi` 19). Of those 54, **0** have a
+`price_text` with exactly one parseable number (combo rows embed two
+numbers, market-price rows embed zero). The WARN sub-condition is
+implemented and self-tested (line 1614) but fires 0 times against the real
+goldens; both facts (54-item population, 0-firing sub-condition) are
+reported, not conflated.
+
+**Amendment 5, assert D adjacent-equal reports runs, not items.** Amended:
+collapse consecutive equal prices within a section into runs; report
+length-2 runs (the carry-down/transposition suspect) first, length-3+ runs
+after as informational. Cause: card-asserted, one line per pair over-reports
+a real price tier as N-1 separate suspicious pairs. Measured this session
+(same direct scan): **27 pair-runs** and **3 longer runs** (`masa-sushi`
+`Traditional Roll` n:58-60 length 3, `Fresh Roll` n:78-81 length 4,
+`Baked Roll` n:96-99 length 4). Coverage check: 27x1 + (3-1)+(4-1)+(4-1) =
+27+8 = **35**, matching the original per-pair count exactly, confirming the
+run-collapse changes presentation, not coverage.
+
+**T3-1 constraint, recursive sort determinism.** `_photo_sort_key` keys on
+the stem alone, correct for one `photos/` directory but not for the
+recursive `raw/` walk (two files in different subdirectories could key
+identically and fall back to filesystem order). Fix: `_raw_photo_sort_key`
+keys on `(str(parent), *_photo_sort_key(p))`. Confirmed implemented at line
+217, used at `cmd_check` line 1475; `_photo_sort_key` itself (single
+directory) is unaffected.
+
+### Amendments 6 through 8 (this session, authorized mid-session before any
+doc text was written)
+
+**Amendment 6, assert F's lexicon and detector are a NAMED FINDING, not
+fixed.** The sashimi delta investigation (below) surfaced two distinct
+detector failures:
+
+- Under-reporting: `km-sushi-sashimi` n:1, 2, 3 (Special A/B/C) detect as
+  "has romaji" only because the lexicon term `ebi` appears inside a count
+  phrase describing a platter component (`"...assorted sashimi with 2
+  ebi"`), not the item's own romaji name. The detector cannot distinguish
+  an item's own romaji from a romaji term appearing incidentally in a
+  component list.
+- Over-reporting: `km-sushi-sashimi` n:10 (Japanese Sea Bream) genuinely
+  gives its romaji inline in `notes` (`"Tai; seasonal, market price"`,
+  the same pattern as n:9/11/12's `Maguro`/`Aji`/`Amaebi`), but `tai` is
+  not in `ROMAJI_LEXICON`, so it counts as missing when it is not.
+- Swept the rest of the applicable population (all four menus) for any
+  other lexicon term present in the data but absent from `ROMAJI_LEXICON`:
+  none found. Every `masa-sushi` structured `romaji: X` field's `X` is
+  already in the lexicon (the lexicon's own comment states it was built
+  from these goldens). `tai` is the one confirmed absence.
+- **Consequence, stated explicitly: the shipped 30 is a LOWER BOUND on
+  items missing their own romaji, not a measurement of it.**
+- **Not fixed, deliberately.** Assert F is a survey feeding a romaji
+  convention decision that has not been made; expanding the lexicon or the
+  detector now would bias the survey toward whichever terms a fixer
+  happened to think of. Reported to oversight, not resolved in this diff.
+
+**Amendment 7, applicable-item population stated per menu.** Missing over
+applicable, all four menus with a Sushi or Sashimi section, reproduced this
+session via `env -u ANTHROPIC_API_KEY uv run evals/run_evals.py --check`:
+
+| Menu | Missing / Applicable | n (missing) |
+|---|---|---|
+| km-sushi-nigiri | 16/23 | 1,2,3,4,5,6,7,8,9,10,12,14,15,16,20,23 |
+| km-sushi-sashimi | 6/12 | 4,5,6,7,8,10 |
+| kuu-sushi-happy-hour | 7/7 | 8,9,10,11,12,13,14 |
+| masa-sushi | 1/26 | 34 |
+
+**Amendment 8, section-matching substring is a stated limitation.**
+Confirmed by reading `_assert_f_romaji` (lines 666-667): the match is
+`section = it.get("section") or ""` then `"sushi" not in section.lower()
+and "sashimi" not in section.lower()`. The `slug` parameter is used only
+inside the returned `LintFinding` for labeling; it never enters the match
+condition. Confirmed: the match is against the `section` field only, never
+the slug or menu name. Empirically, across all 10 menus' distinct section
+names, the substring match fires on exactly `Sushi`, `Sushi & Sashimi`,
+`Premium Sushi`, `H.H Sushi Sampler`, `Sashimi`, `Sashimi Special`,
+`Premium Sashimi`, `H.H Sashimi`, all correct for this survey.
+**Limitation, reported not fixed:** the match is substring, not exact-set;
+a future section whose name merely contains "sushi" or "sashimi" (for
+example a hypothetical "Sushi Bar Sides" with no actual sushi) would be
+swept into the applicable population with no reviewer signal that it
+happened.
+
+### Proofs produced this session (command output, not cited from the plan)
+
+1. **Baseline reproduction.** `env -u ANTHROPIC_API_KEY uv run
+   evals/run_evals.py --check`: 10 menus discovered, 355 items
+   (8+18+18+19+41+15+12+43+48+133, confirmed by direct sum), 0 ERROR / 34
+   WARN / 20 SKIP, exit 0. `--check --menu masa-sushi`: exactly 1 menu
+   linted (20 WARN, 2 SKIP for that menu alone), exit 0.
+2. **T3-2 byte-identical proof.** Mandated method: a scratchpad script
+   outside the repo (`/tmp/.../scratchpad/t3_2_proof.py`), read-only glob
+   over the real `evals/menus/*/photos/`, comparing bare `sorted(paths)`
+   (the pre-fix behavior) against `sorted(paths, key=_photo_sort_key)` per
+   menu. No `git stash`, no `git checkout`, no repo mutation. Result: all
+   10 menus identical (every current stem is a single digit or `1.jpeg`/
+   `2.jpeg`, so lexicographic and natural order coincide today; the fix
+   changes future behavior, not today's).
+3. **Raw drop folder order.** Scratchpad script
+   (`t3_1_and_synthetic.py`), read-only glob over the real
+   `evals/menus/raw/`: 12 files, all under `raw/kuu-sushi/`, `IMG_3433.jpeg`
+   through `IMG_3444.jpeg` in that order, each keying to
+   `(".../raw/kuu-sushi", 1, 0, "img_34xx")`, proving directory-qualified
+   determinism.
+4. **Synthetic 1/2/10 case.** Same scratchpad script, throwaway temp files,
+   no repo file touched: bare `sorted()` gives `1.jpg, 10.jpg, 2.jpg`;
+   `_photo_sort_key` gives `1.jpg, 2.jpg, 10.jpg`.
+5. **Exit code 1.** Scratchpad script (`exit_code_1_proof.py`), `uv run`
+   with the same PEP 723 header as `run_evals.py`, imports the shipped
+   module and builds a synthetic menu (photos/ + golden.json with one
+   deliberate assert-A ERROR) in a temp directory, points the module's
+   `MENUS_DIR` at it in memory only (restored after), and calls the real
+   `cmd_check()`. Result: 1 ERROR / 0 WARN / 2 SKIP, returned exit code 1.
+   No repo golden used; `MENUS_DIR` restored, no trace left on disk.
+6. `git diff --stat -- evals/menus/*/golden.json`: empty. Zero goldens
+   modified.
+7. `find evals/menus -name sections.json`: empty. All 10 menus SKIP assert
+   C, zero sidecars committed.
+
+### Assert F delta: both numbers, and the cause
+
+Shipped, this session: **30** missing (nigiri 16, sashimi **6**, happy-hour
+7, masa 1). The prior session's plan's read-only dry run predicted **36**
+(nigiri 16, sashimi **12**, happy-hour 7, masa 1). Assert F was **not**
+changed to make the numbers match.
+
+Established this session, item by item, from `km-sushi-sashimi/golden.json`:
+six of the twelve applicable sashimi items detect romaji, all from `notes`
+prose: n:1/2/3 via `ebi` (inside a component-count phrase, see amendment 6),
+n:9 via `maguro`+`toro`, n:11 via `aji`, n:12 via `amaebi`. The other six
+(n:4,5,6,7,8,10) carry no lexicon term in the shipped detector's terms
+(`served with 7 pcs`), except n:10 whose romaji `Tai` is a genuine lexicon
+gap (amendment 6).
+
+Cause: five candidate detector variants were run this session against all
+10 goldens (lexicon over name+notes as shipped; name only; notes only;
+structured `romaji:` prefix only; structured OR name-lexicon; case-sensitive
+lowercase lexicon). None reproduces the dry run's `(16, 12, 7, 1)`
+simultaneously. Only the structured-prefix variants give sashimi 12, and
+both of those give nigiri 22-23, not 16 (nigiri's 16 requires bare-prose
+notes matching, which the structured-only variants exclude). So the dry
+run's sashimi cell is inconsistent with its own nigiri cell under every
+uniform detector tested this session. Tagged: the shipped **6** is
+**ESTABLISHED**, verified item by item above. The dry run's **12** is
+**INFERRED** to be an artifact rather than a measurement, most probably
+(tagged **SPECULATIVE**, no dry-run artifact survives to confirm it) the
+sashimi cell recording the menu's applicable-item count (which is exactly
+12) rather than a missing-count, possibly computed before amendment 2
+replaced structured-only detection with name+notes and not recomputed
+alongside the other three cells. The shipped behavior stands as correct;
+this session did not change assert F.
+
+### Findings for Tom (report-only, no further edits made)
+
+- Assert G's negative fixture was **not missing**. The prior session's PASS
+  line claim ("one negative fixture per assert A-G") is true as inherited.
+- `normalize_ingredient`'s internal order, confirmed by reading lines
+  751-766: alias lookup on the raw lowercased string runs first and
+  short-circuits on a hit; the plural fold runs second; a second alias
+  lookup on the folded form runs third. On record ahead of session C's
+  alias edits.
+- `normalize_ingredient`'s plural fold turns `asparagus` into `asparagu`
+  and `octopus` into `octopu` (confirmed by direct call this session).
+  Reported, not fixed: scoring logic, out of this session's scope.
+- Assert F's detector and lexicon are incomplete in two distinct,
+  documented ways (amendment 6); the shipped WARN count of 30 is a lower
+  bound, not a measurement. This is a decision for oversight: whether and
+  how to expand `ROMAJI_LEXICON` and disambiguate an item's own romaji
+  from an incidentally-mentioned component term.
+- Assert F's section match is substring, not exact-set (amendment 8);
+  reported as a standing limitation for any future section naming.
+- Every assert result this session (0 ERROR, 34 WARN, 20 SKIP across the
+  real goldens) matched what was already observed in the card, reproduced
+  independently rather than cited, except the assert F sashimi cell
+  (6 vs. the card's cited ~12/36 total), explained above.
+
+### Patterns established
+
+- When a card's "already observed" section cites a count from a prior
+  session's dry run, re-deriving it independently (multiple detector
+  variants, cross-checked against a second dimension like nigiri's own
+  count) is what surfaces whether the cited number is a measurement or an
+  artifact. A single re-run that reproduces the total without breaking it
+  into per-menu cells would have missed this.
+- A completeness survey (assert F) that shares a detector with a possible
+  false-positive path (a lexicon term appearing incidentally, not as the
+  item's own label) needs its under-reporting and over-reporting failure
+  modes named separately; averaging them into one WARN count would have
+  hidden that the two errors partly cancel in the total but not per menu.
+
+### Single next action
+
+Oversight's call on assert F's lexicon and detector (amendment 6): whether
+to expand `ROMAJI_LEXICON` (starting candidate: `tai`), and how to
+disambiguate an item's own romaji from a romaji term inside a component
+list, before the WARN count is used to drive any romaji-convention
+decision.

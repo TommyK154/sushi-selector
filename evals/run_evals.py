@@ -37,7 +37,9 @@ import argparse
 import base64
 import json
 import os
+import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -194,6 +196,37 @@ class Menu:
     golden: dict
 
 
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+
+
+def _photo_sort_key(p: Path) -> tuple:
+    """Natural sort on the numeric stem, so 10 follows 2, never 1 (T3-2).
+
+    Documented fallback: a non-numeric stem sorts after every numeric stem,
+    then case-insensitively among itself. Front-page-first (SPEC.md's merge
+    order) holds because 1 < 2 < 10 numerically. Scoped to filenames within
+    one directory; see _raw_photo_sort_key for the recursive raw/ walk,
+    where the stem alone is not enough to stay deterministic.
+    """
+    stem = p.stem
+    if stem.isdigit():
+        return (0, int(stem), "")
+    return (1, 0, stem.lower())
+
+
+def _raw_photo_sort_key(p: Path) -> tuple:
+    """Deterministic ordering for the recursive raw/ walk (T3-1).
+
+    _photo_sort_key alone is not enough here: raw/a/1.jpg and raw/b/1.jpg
+    both key to (0, 1, ""), so two files in different subdirectories would
+    fall back to filesystem insertion order. Keying on the parent path
+    first, then _photo_sort_key, makes the walk fully deterministic across
+    directories. The single-directory photos/ discovery below is unaffected
+    by this and keeps the plain _photo_sort_key.
+    """
+    return (str(p.parent), *_photo_sort_key(p))
+
+
 def discover_menus() -> list[Menu]:
     """Find scored menus: evals/menus/<slug>/ with photos/ and golden.json.
 
@@ -211,13 +244,503 @@ def discover_menus() -> list[Menu]:
         if not golden_path.exists():
             continue
         photos = (
-            sorted(p for p in photos_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
+            sorted(
+                (p for p in photos_dir.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES),
+                key=_photo_sort_key,
+            )
             if photos_dir.exists()
             else []
         )
         golden = json.loads(_read_text(golden_path))
         menus.append(Menu(slug=entry.name, photos=photos, golden=golden))
     return menus
+
+
+# --------------------------------------------------------------------------
+# Golden lint (offline, --check only, P1-SB)
+#
+# Bounds mechanical errors in golden.json files: dropped n, a price that
+# disagrees with its price_text, an ingredient string nobody taught the
+# alias table, a confidence token leaking out of notes. Goldens are
+# human-owned; a lint finding is reported, never auto-fixed here. Two
+# asserts (G, F) carry amendments made in plan mode, recorded in
+# docs/BUILDLOG.md alongside the original card wording.
+# --------------------------------------------------------------------------
+
+VOCABULARY_PATH = REPO_ROOT / "evals" / "accepted_vocabulary.json"
+
+CONFIDENCE_TOKEN_RE = re.compile(r"(?i)\b(?:INFERRED|LOW|MED|HIGH)\b")
+
+# Romaji terms actually printed across the golden set (masa-sushi's
+# structured "romaji: X" notes and KUU nigiri's bare prose), used by
+# assert F. Deliberately excludes gunkan, nigiri, maki, temaki, sashimi:
+# those are preparation or format words, not species/ingredient names, and
+# an item can carry one without ever giving the fish's romaji name, so
+# including them would mask the exact omission this assert exists to find.
+ROMAJI_LEXICON = frozenset(
+    {
+        "toro", "maguro", "hon maguro", "hiro maguro",
+        "uni", "amaebi", "kanpachi", "hirame", "aji", "ono",
+        "sake", "sake gunsai", "hamachi", "unagi", "saba", "tako",
+        "kaibashira", "ikura", "masago", "hokigai", "ika", "ebi",
+        "tamago", "inari", "uzura",
+    }
+)
+
+
+@dataclass
+class LintFinding:
+    assert_id: str  # "A".."G"
+    severity: str  # "ERROR" | "WARN" | "SKIP"
+    slug: str
+    n: Optional[int]  # item n, or None for a menu-level finding
+    message: str
+
+
+@dataclass
+class LintContext:
+    aliases: dict[str, str]
+    vocabulary_normalized: frozenset[str]
+    composed_schema: dict
+    menus_dir: Path
+
+
+def load_accepted_vocabulary() -> list[str]:
+    """Raw, unnormalized ingredient strings (design amendment: the file
+    stays reviewable; normalization happens at assert E's lookup time, not
+    here). Returns [] if the file does not exist yet.
+    """
+    if not VOCABULARY_PATH.exists():
+        return []
+    data = json.loads(_read_text(VOCABULARY_PATH))
+    return data.get("ingredients", [])
+
+
+def _composed_item_schema() -> dict:
+    """The merged golden item schema: index.schema.json's item properties
+    union details.schema.json's, which _schema_composition_self_test proves
+    (at every --check run, using the real schema files, not a hardcoded
+    claim) is exactly url.schema.json's item subschema. is_raw allows null
+    per the assert G amendment: the locked README convention and the
+    schemas already in shared/schema/ both treat null as "not determinable",
+    not an error.
+    """
+    return {
+        "required": [
+            "n", "name", "section", "price_text", "price",
+            "ingredients", "wrap", "is_raw",
+        ],
+        "properties": {
+            "n": {"type": "integer"},
+            "name": {"type": "string"},
+            "section": {"type": ["string", "null"]},
+            "price_text": {"type": ["string", "null"]},
+            "price": {"type": ["number", "null"]},
+            "ingredients": {"type": "array"},
+            "wrap": {"enum": ["nori", "soy_paper", "rice_paper", "none", "unknown"]},
+            "is_raw": {"type": ["boolean", "null"]},
+            "notes": {"type": ["string", "null"]},
+        },
+    }
+
+
+def _schema_composition_self_test(assets: "SharedAssets") -> None:
+    """Proves the schema-ownership claim rather than asserting it: that
+    index.schema.json's item properties, unioned with details.schema.json's,
+    equal url.schema.json's item subschema exactly (required set, per-
+    property type/enum constraints, property set). Runs against the real
+    files loaded this run, not a hardcoded copy.
+    """
+
+    def _strip_desc(d: dict) -> dict:
+        return {k: v for k, v in d.items() if k != "description"}
+
+    idx_item = assets.index_schema["properties"]["items"]["items"]
+    det_item = assets.details_schema["properties"]["items"]["items"]
+    url_item = assets.url_schema["properties"]["items"]["items"]
+
+    composed_props = {**idx_item["properties"], **det_item["properties"]}
+    composed_req = set(idx_item["required"]) | set(det_item["required"])
+
+    assert set(composed_props) == set(url_item["properties"]), (
+        set(composed_props), set(url_item["properties"])
+    )
+    for key, spec in composed_props.items():
+        assert _strip_desc(spec) == _strip_desc(url_item["properties"][key]), key
+    assert composed_req == set(url_item["required"]), (composed_req, set(url_item["required"]))
+
+
+def _matches_any_type(val: Any, types: list[str]) -> bool:
+    for t in types:
+        if t == "string" and isinstance(val, str):
+            return True
+        if t == "integer" and isinstance(val, int) and not isinstance(val, bool):
+            return True
+        if t == "number" and isinstance(val, (int, float)) and not isinstance(val, bool):
+            return True
+        if t == "boolean" and isinstance(val, bool):
+            return True
+        if t == "array" and isinstance(val, list):
+            return True
+        if t == "object" and isinstance(val, dict):
+            return True
+        if t == "null" and val is None:
+            return True
+    return False
+
+
+def _validate_item(item: dict, schema: dict) -> list[str]:
+    """Hand-written validator over the composed item schema: type, enum,
+    required, additionalProperties. No jsonschema dependency (out of scope
+    per the card: no new third-party packages).
+    """
+    problems: list[str] = []
+    props = schema["properties"]
+    missing = [k for k in schema["required"] if k not in item]
+    if missing:
+        problems.append(f"missing required field(s): {sorted(missing)}")
+    extra = [k for k in item if k not in props]
+    if extra:
+        problems.append(f"unexpected field(s): {sorted(extra)}")
+    for key, val in item.items():
+        if key not in props:
+            continue
+        spec = props[key]
+        if "type" in spec:
+            types = spec["type"] if isinstance(spec["type"], list) else [spec["type"]]
+            if not _matches_any_type(val, types):
+                problems.append(f"{key}: expected type {types}, got {type(val).__name__} ({val!r})")
+        if "enum" in spec and val not in spec["enum"]:
+            problems.append(f"{key}: {val!r} not in enum {spec['enum']}")
+        if key == "ingredients" and isinstance(val, list):
+            bad = [x for x in val if not isinstance(x, str)]
+            if bad:
+                problems.append(f"ingredients: non-string entries {bad!r}")
+    return problems
+
+
+def _assert_a_confidence_tokens(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR. No confidence or inference token (INFERRED, LOW, MED, HIGH,
+    case variants) in name, section, price_text, wrap, or any ingredients
+    entry. notes is exempt (docs/EVALS.md: it legitimately carries them).
+    """
+    findings: list[LintFinding] = []
+    for it in golden.get("items", []):
+        n = it.get("n")
+        for field in ("name", "section", "price_text", "wrap"):
+            v = it.get(field)
+            if isinstance(v, str) and CONFIDENCE_TOKEN_RE.search(v):
+                findings.append(LintFinding("A", "ERROR", slug, n, f"{field}={v!r} carries a confidence token"))
+        for ing in it.get("ingredients", []) or []:
+            if isinstance(ing, str) and CONFIDENCE_TOKEN_RE.search(ing):
+                findings.append(LintFinding("A", "ERROR", slug, n, f"ingredient {ing!r} carries a confidence token"))
+    return findings
+
+
+def _assert_b_n_contiguity(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR. n values contiguous from 1, no gaps, no duplicates."""
+    items = golden.get("items", [])
+    ns = [it.get("n") for it in items]
+    expected = set(range(1, len(items) + 1))
+    actual = set(ns)
+    missing = sorted(expected - actual)
+    dupes = sorted({x for x in ns if ns.count(x) > 1})
+    findings: list[LintFinding] = []
+    if missing:
+        findings.append(LintFinding("B", "ERROR", slug, None, f"n gap(s), missing {missing}"))
+    if dupes:
+        findings.append(LintFinding("B", "ERROR", slug, None, f"n duplicate(s): {dupes}"))
+    return findings
+
+
+def _assert_c_section_manifest(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR when a sections.json sidecar exists: per-section item counts
+    and the section name set/order match the manifest exactly. SKIP when
+    the sidecar is absent, reported per menu. Section names and counts in
+    the sidecar are hand written from the printed page; this assert reads
+    the sidecar and the golden, and never derives one from the other.
+    """
+    sidecar = ctx.menus_dir / slug / "sections.json"
+    if not sidecar.exists():
+        try:
+            rel = sidecar.relative_to(REPO_ROOT)
+        except ValueError:
+            rel = sidecar  # fixture path outside the repo (self-test), print in full
+        return [LintFinding("C", "SKIP", slug, None, f"no sidecar at {rel}, assert C skipped")]
+    try:
+        manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return [LintFinding("C", "ERROR", slug, None, f"sections.json unreadable: {e}")]
+
+    findings: list[LintFinding] = []
+    manifest_sections = manifest.get("sections", [])
+    manifest_names = [s.get("section") for s in manifest_sections]
+    manifest_counts = {s.get("section"): s.get("expected_count") for s in manifest_sections}
+
+    golden_names: list[str] = []
+    golden_counts: dict[str, int] = {}
+    for it in golden.get("items", []):
+        s = it.get("section")
+        if s not in golden_names:
+            golden_names.append(s)
+        golden_counts[s] = golden_counts.get(s, 0) + 1
+
+    if manifest_names != golden_names:
+        findings.append(
+            LintFinding(
+                "C", "ERROR", slug, None,
+                f"section name set/order mismatch: manifest={manifest_names} golden={golden_names}",
+            )
+        )
+    for name in set(manifest_names) | set(golden_names):
+        mc = manifest_counts.get(name)
+        gc = golden_counts.get(name, 0)
+        if mc != gc:
+            findings.append(
+                LintFinding("C", "ERROR", slug, None, f"section '{name}' count mismatch: manifest={mc} golden={gc}")
+            )
+    return findings
+
+
+def _parse_single_price(price_text: Optional[str]) -> Optional[float]:
+    """Parse price_text to a float only when exactly one number is present.
+    Combo and market-price text ('2 for 23.00', 'MP', '8/15') is not a
+    mismatch, it is unparseable, and this returns None so callers skip it.
+    """
+    if not isinstance(price_text, str):
+        return None
+    matches = re.findall(r"\d+(?:\.\d+)?", price_text)
+    if len(matches) != 1:
+        return None
+    return float(matches[0])
+
+
+def _assert_d_price_invariants(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR on price invariants: price_text present on every item; when
+    price is non-null it equals the value parsed from price_text; no
+    negative prices; no zero prices.
+
+    WARN (amendment 4): a null price whose price_text has exactly one
+    parseable number. The combo-pricing convention keeps price null with a
+    verbatim price_text at section level, so a hard ERROR here would fail
+    correct, human-owned goldens; this WARNs instead, listed by n.
+
+    WARN (amendment 5): the I-4 carry-down signature, identical price on
+    adjacent n within a section, collapsed into runs and reported as runs,
+    not one line per pair. Runs of length 2 (the suspicious signature) are
+    emitted first; runs of length 3+ (almost certainly a real price tier)
+    are emitted after, informational.
+
+    SKIP: the adjacent-column signature (a price matching the item one row
+    up in the adjacent column) can never fire against these goldens, which
+    carry no column data; every item's keys are exactly n, name, section,
+    price_text, price, ingredients, wrap, is_raw, notes. Implemented as an
+    explicit SKIP with reason rather than silently absent.
+    """
+    items = golden.get("items", [])
+    findings: list[LintFinding] = []
+
+    for it in items:
+        n = it.get("n")
+        price_text = it.get("price_text")
+        price = it.get("price")
+        if not isinstance(price_text, str) or not price_text.strip():
+            findings.append(LintFinding("D", "ERROR", slug, n, "price_text missing or empty"))
+            continue
+        if isinstance(price, (int, float)) and not isinstance(price, bool):
+            if price < 0:
+                findings.append(LintFinding("D", "ERROR", slug, n, f"negative price {price}"))
+            if price == 0:
+                findings.append(LintFinding("D", "ERROR", slug, n, f"zero price {price}"))
+            parsed = _parse_single_price(price_text)
+            if parsed is not None and abs(parsed - price) > 1e-6:
+                findings.append(
+                    LintFinding(
+                        "D", "ERROR", slug, n,
+                        f"price {price} disagrees with price_text {price_text!r} (parsed {parsed})",
+                    )
+                )
+        elif price is None:
+            parsed = _parse_single_price(price_text)
+            if parsed is not None:
+                findings.append(
+                    LintFinding(
+                        "D", "WARN", slug, n,
+                        f"price is null but price_text {price_text!r} parses to a single number {parsed}",
+                    )
+                )
+
+    pair_runs: list[tuple] = []
+    long_runs: list[tuple] = []
+    i = 0
+    while i < len(items):
+        j = i
+        while (
+            j + 1 < len(items)
+            and items[j + 1].get("section") == items[i].get("section")
+            and items[j + 1].get("price") == items[i].get("price")
+            and items[i].get("price") is not None
+        ):
+            j += 1
+        run_len = j - i + 1
+        if run_len >= 2:
+            entry = (items[i].get("section"), items[i].get("n"), items[j].get("n"), items[i].get("price"), run_len)
+            (pair_runs if run_len == 2 else long_runs).append(entry)
+        i = j + 1
+
+    for section, n_start, n_end, price, _ in pair_runs:
+        findings.append(
+            LintFinding(
+                "D", "WARN", slug, None,
+                f"adjacent-equal price pair in '{section}': n={n_start}..{n_end} price={price} "
+                f"(carry-down/transposition suspect)",
+            )
+        )
+    for section, n_start, n_end, price, run_len in long_runs:
+        findings.append(
+            LintFinding(
+                "D", "WARN", slug, None,
+                f"adjacent-equal price run (informational, likely a real tier) in '{section}': "
+                f"n={n_start}..{n_end} price={price} length={run_len}",
+            )
+        )
+
+    findings.append(
+        LintFinding(
+            "D", "SKIP", slug, None,
+            "adjacent-column price signature: goldens carry no column data, this check cannot fire",
+        )
+    )
+    return findings
+
+
+def _assert_e_vocabulary(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR. Every ingredient string resolves in the aliases file or in
+    accepted_vocabulary.json. This is the assert that catches the
+    tofu-skin class: a string nobody ever taught the alias table or the
+    vocabulary floor.
+
+    Amendment 3: accepted_vocabulary.json stores raw, unnormalized strings.
+    Symmetry is preserved by normalizing BOTH sides at lookup time here,
+    through the same normalize_ingredient the scoring layer uses.
+    """
+    findings: list[LintFinding] = []
+    alias_targets = set(ctx.aliases.values())
+    for it in golden.get("items", []):
+        n = it.get("n")
+        for ing in it.get("ingredients", []) or []:
+            if not isinstance(ing, str) or not ing.strip():
+                continue
+            normalized = normalize_ingredient(ing, ctx.aliases)
+            if normalized in alias_targets or normalized in ctx.vocabulary_normalized:
+                continue
+            findings.append(
+                LintFinding(
+                    "E", "ERROR", slug, n,
+                    f"ingredient {ing!r} (normalized {normalized!r}) not in aliases or accepted_vocabulary.json",
+                )
+            )
+    return findings
+
+
+def _has_romaji(text: str) -> bool:
+    lowered = text.lower()
+    return any(re.search(rf"\b{re.escape(term)}\b", lowered) for term in ROMAJI_LEXICON)
+
+
+def _assert_f_romaji(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """WARN, never ERROR, never gating (amended). Romaji present on items
+    in Sushi and Sashimi sections: WARN when absent, detected across name
+    and notes together, case insensitive, accepting both the structured
+    'romaji: X' form (masa-sushi) and bare prose (KUU nigiri) equally.
+    Reported one line per menu, not per item.
+
+    This is a completeness heuristic, not a mechanical invariant: it
+    cannot distinguish a drafter omission from a menu that never printed
+    romaji at all. It is a survey that feeds a future convention decision,
+    not a defect list.
+    """
+    missing_ns: list[Optional[int]] = []
+    applicable = 0
+    for it in golden.get("items", []):
+        section = it.get("section") or ""
+        if "sushi" not in section.lower() and "sashimi" not in section.lower():
+            continue
+        applicable += 1
+        text = f"{it.get('name') or ''} {it.get('notes') or ''}"
+        if not _has_romaji(text):
+            missing_ns.append(it.get("n"))
+    if applicable == 0 or not missing_ns:
+        return []
+    return [
+        LintFinding(
+            "F", "WARN", slug, None,
+            f"{len(missing_ns)}/{applicable} items in Sushi/Sashimi sections missing romaji, n={missing_ns}",
+        )
+    ]
+
+
+def _assert_g_schema(golden: dict, slug: str, ctx: LintContext) -> list[LintFinding]:
+    """ERROR (amended). Each item validates against the merged item schema,
+    wrap is in the closed enum, is_raw is true, false, or null (null is the
+    README's 'not determinable' and is valid). Validates the item shape
+    only: the golden's top-level envelope (restaurant_name, source_photos,
+    notes) has no shared schema and is governed by evals/menus/README.md.
+    """
+    findings: list[LintFinding] = []
+    for it in golden.get("items", []):
+        n = it.get("n")
+        for problem in _validate_item(it, ctx.composed_schema):
+            findings.append(LintFinding("G", "ERROR", slug, n, problem))
+    return findings
+
+
+LINT_ASSERTS = (
+    _assert_a_confidence_tokens,
+    _assert_b_n_contiguity,
+    _assert_c_section_manifest,
+    _assert_d_price_invariants,
+    _assert_e_vocabulary,
+    _assert_f_romaji,
+    _assert_g_schema,
+)
+
+
+def lint_menu(menu: "Menu", ctx: LintContext) -> list[LintFinding]:
+    findings: list[LintFinding] = []
+    for fn in LINT_ASSERTS:
+        findings.extend(fn(menu.golden, menu.slug, ctx))
+    return findings
+
+
+def cmd_emit_manifest_skeleton(slug: str, out_path: Optional[Path]) -> int:
+    """Write an EMPTY sections.json skeleton for a menu. Never reads
+    golden.json: section names and expected_count come from counting the
+    printed page by hand (design call 1: deriving them from the golden
+    would make assert C circular). Refuses to overwrite an existing file.
+    """
+    target = out_path or (MENUS_DIR / slug / "sections.json")
+    if target.exists():
+        print(f"refusing to overwrite existing {target}", file=sys.stderr)
+        return 2
+    skeleton = {
+        "_comment": (
+            "Hand written from the printed menu page. Section names and "
+            "expected_count come from counting the photo, never from "
+            "golden.json: deriving them from the golden would make assert C "
+            "circular."
+        ),
+        "sections": [],
+        "provenance": {
+            "counted_by": None,
+            "counted_on": None,
+            "source_photo": None,
+        },
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(skeleton, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"wrote empty manifest skeleton: {target}")
+    return 0
 
 
 # --------------------------------------------------------------------------
@@ -913,15 +1436,18 @@ def write_report(
 # --------------------------------------------------------------------------
 
 
-def cmd_check() -> int:
-    """Offline readiness check. Loads what exists, reports what is missing.
+def cmd_check(args: Optional[argparse.Namespace] = None) -> int:
+    """Offline readiness check, plus the offline golden lint (P1-SB).
 
     Makes zero API calls, so it is safe to run any time. This is the Phase 0
     proof that the harness plumbing works before any prompt or schema exists.
+    --menu, if given, narrows only the lint step's reporting; discovery and
+    the raw photo count above it are unconditional.
     """
     print("Sushi Selector eval harness: readiness check (no API calls)")
     print(f"repo root: {REPO_ROOT}")
 
+    assets: Optional[SharedAssets] = None
     try:
         assets = load_shared_assets()
         print("shared assets: loaded")
@@ -936,10 +1462,23 @@ def cmd_check() -> int:
     for m in menus:
         print(f"  - {m.slug}: {len(m.photos)} photo(s), {len(m.golden.get('items', []))} golden items")
 
+    # T3-1: raw/ is now organized into per-restaurant subdirectories (session
+    # A's reorganization), so a non-recursive count silently reads 0. Fixed
+    # to walk recursively; both numbers print so the fix is visible, not
+    # assumed. Sorted with the same directory-qualified natural-sort key as
+    # the recursive walk elsewhere, so the printed order is deterministic.
     raw = MENUS_DIR / "raw"
     if raw.exists():
-        raw_imgs = [p for p in raw.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"}]
-        print(f"raw drop folder: {len(raw_imgs)} original photo(s) kept as provenance (organized into menus)")
+        old_raw_imgs = [p for p in raw.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES]
+        new_raw_imgs = sorted(
+            (p for p in raw.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES),
+            key=_raw_photo_sort_key,
+        )
+        print(
+            f"raw drop folder: {len(new_raw_imgs)} original photo(s) kept as provenance "
+            f"(organized into menus) [T3-1 fix: recursive; non-recursive count was "
+            f"{len(old_raw_imgs)}]"
+        )
 
     key_present = bool(os.environ.get("ANTHROPIC_API_KEY"))
     print(f"ANTHROPIC_API_KEY in env: {'yes' if key_present else 'no'}")
@@ -947,8 +1486,173 @@ def cmd_check() -> int:
     # Prove the deterministic scoring layer works, offline, on a tiny fixture.
     _self_test()
     print("scoring self-test: PASS")
+
+    if assets is not None:
+        _schema_composition_self_test(assets)
+        print("schema composition self-test: PASS (index schema union details schema == url item subschema)")
+
+    _lint_self_test()
+    print("lint self-test: PASS (one negative fixture per assert A-G, synthetic, no repo golden used)")
+
+    aliases = assets.aliases if assets is not None else {}
+    vocabulary_raw = load_accepted_vocabulary()
+    vocabulary_normalized = frozenset(normalize_ingredient(v, aliases) for v in vocabulary_raw)
+    ctx = LintContext(
+        aliases=aliases,
+        vocabulary_normalized=vocabulary_normalized,
+        composed_schema=_composed_item_schema(),
+        menus_dir=MENUS_DIR,
+    )
+
+    lint_target_slug = getattr(args, "menu", None) if args is not None else None
+    lint_menus = menus
+    if lint_target_slug:
+        lint_menus = [m for m in menus if m.slug == lint_target_slug]
+        if not lint_menus:
+            print(f"no menu with slug '{lint_target_slug}'", file=sys.stderr)
+            return 2
+
+    print(f"\ngolden lint: {len(lint_menus)} menu(s)")
+    all_findings: list[LintFinding] = []
+    for m in lint_menus:
+        findings = lint_menu(m, ctx)
+        all_findings.extend(findings)
+        errors = [f for f in findings if f.severity == "ERROR"]
+        warns = [f for f in findings if f.severity == "WARN"]
+        skips = [f for f in findings if f.severity == "SKIP"]
+        print(f"  - {m.slug}: {len(errors)} ERROR, {len(warns)} WARN, {len(skips)} SKIP")
+        for f in errors + warns + skips:
+            where = f" n={f.n}" if f.n is not None else ""
+            print(f"      [{f.assert_id} {f.severity}]{where} {f.message}")
+
+    error_count = sum(1 for f in all_findings if f.severity == "ERROR")
+    warn_count = sum(1 for f in all_findings if f.severity == "WARN")
+    skip_count = sum(1 for f in all_findings if f.severity == "SKIP")
+    print(f"\nlint totals: {error_count} ERROR, {warn_count} WARN, {skip_count} SKIP")
+
     print("\nreadiness check complete. Run --menu <slug> or --all to spend API credits.")
-    return 0
+    return 1 if error_count else 0
+
+
+def _lint_self_test() -> None:
+    """Synthetic, in-memory fixtures proving each assert A-G fires when it
+    should (and, for the two amended asserts, does NOT fire where the
+    amendment says it must not). Never uses a repo golden as a fixture.
+
+    Assert C is file-based by design (it reads a hand-written sidecar off
+    disk), so its fixture lives in a throwaway temporary directory, never
+    under evals/menus/.
+    """
+    aliases = {"krab": "imitation crab"}
+    vocab_normalized = frozenset({"tuna", "rice", "nori", "imitation crab"})
+    schema = _composed_item_schema()
+    ctx = LintContext(
+        aliases=aliases,
+        vocabulary_normalized=vocab_normalized,
+        composed_schema=schema,
+        menus_dir=MENUS_DIR,
+    )
+
+    def _item(**kw: Any) -> dict:
+        base = {
+            "n": 1,
+            "name": "Test Roll",
+            "section": "Test",
+            "price_text": "5.00",
+            "price": 5.0,
+            "ingredients": ["tuna"],
+            "wrap": "nori",
+            "is_raw": False,
+            "notes": None,
+        }
+        base.update(kw)
+        return base
+
+    # A: a confidence token outside notes fires ERROR.
+    golden = {"items": [_item(name="INFERRED Spicy Roll")]}
+    assert any(f.severity == "ERROR" for f in _assert_a_confidence_tokens(golden, "fixture", ctx)), (
+        "assert A did not fire on a confidence token in name"
+    )
+    # A exemption: the same token in notes must not fire (docs/EVALS.md).
+    golden = {"items": [_item(notes="INFERRED: tuna")]}
+    assert not _assert_a_confidence_tokens(golden, "fixture", ctx), (
+        "assert A fired on the notes field, which is exempt"
+    )
+
+    # B: a gap in n fires ERROR.
+    golden = {"items": [_item(n=1), _item(n=3)]}
+    assert any(f.severity == "ERROR" for f in _assert_b_n_contiguity(golden, "fixture", ctx)), (
+        "assert B did not fire on a gap in n"
+    )
+
+    # C: a sidecar count mismatch fires ERROR; an absent sidecar SKIPs.
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_menus = Path(tmp)
+        (tmp_menus / "fixture-menu").mkdir()
+        (tmp_menus / "fixture-menu" / "sections.json").write_text(
+            json.dumps({"sections": [{"section": "Test", "expected_count": 99}]}),
+            encoding="utf-8",
+        )
+        c_ctx = LintContext(
+            aliases=aliases, vocabulary_normalized=vocab_normalized, composed_schema=schema, menus_dir=tmp_menus
+        )
+        golden = {"items": [_item(n=1)]}
+        assert any(f.severity == "ERROR" for f in _assert_c_section_manifest(golden, "fixture-menu", c_ctx)), (
+            "assert C did not fire on a section count mismatch"
+        )
+        assert any(f.severity == "SKIP" for f in _assert_c_section_manifest(golden, "no-sidecar-menu", c_ctx)), (
+            "assert C did not SKIP when the sidecar is absent"
+        )
+
+    # D: a negative price fires ERROR.
+    golden = {"items": [_item(price=-1.0, price_text="-1.00")]}
+    assert any(f.severity == "ERROR" for f in _assert_d_price_invariants(golden, "fixture", ctx)), (
+        "assert D did not fire on a negative price"
+    )
+    # D, amendment 4: null price with a single-parseable price_text is WARN,
+    # never ERROR.
+    golden = {"items": [_item(price=None, price_text="5.00")]}
+    d_findings = _assert_d_price_invariants(golden, "fixture", ctx)
+    assert any(f.assert_id == "D" and f.severity == "WARN" for f in d_findings), (
+        "assert D amendment 4 (null price, single-number price_text) did not WARN"
+    )
+    assert not any(f.severity == "ERROR" for f in d_findings), (
+        "assert D amendment 4 fired ERROR on a null price, which the amendment forbids"
+    )
+    # D, amendment 5: an adjacent-equal-price pair (run length 2) is
+    # reported as a collapsed pair-run, not two separate item lines.
+    golden = {
+        "items": [
+            _item(n=1, price=8.0, price_text="8.00"),
+            _item(n=2, price=8.0, price_text="8.00"),
+        ]
+    }
+    assert any("adjacent-equal price pair" in f.message for f in _assert_d_price_invariants(golden, "fixture", ctx)), (
+        "assert D amendment 5 pair-run did not fire"
+    )
+
+    # E: an ingredient absent from both the aliases and the vocabulary fires ERROR.
+    golden = {"items": [_item(ingredients=["durian"])]}
+    assert any(f.severity == "ERROR" for f in _assert_e_vocabulary(golden, "fixture", ctx)), (
+        "assert E did not fire on an unknown ingredient"
+    )
+
+    # F: a Sushi-section item with no romaji anywhere WARNs.
+    golden = {"items": [_item(section="Sushi", name="Tuna", notes=None)]}
+    assert any(f.severity == "WARN" for f in _assert_f_romaji(golden, "fixture", ctx)), (
+        "assert F did not fire when romaji is absent"
+    )
+
+    # G: a wrap value outside the closed enum fires ERROR.
+    golden = {"items": [_item(wrap="paper")]}
+    assert any(f.severity == "ERROR" for f in _assert_g_schema(golden, "fixture", ctx)), (
+        "assert G did not fire on an invalid wrap value"
+    )
+    # G, amendment 1 regression guard: is_raw: null must NOT fire.
+    golden = {"items": [_item(is_raw=None)]}
+    assert not _assert_g_schema(golden, "fixture", ctx), (
+        "assert G fired on is_raw: null, which the amendment requires to be valid"
+    )
 
 
 def _self_test() -> None:
@@ -1063,13 +1767,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--url-smoke", action="store_true", help="loose URL-path smoke checks (reported, not gated)")
     p.add_argument("--urls", type=str, nargs="*", help="URLs for --url-smoke (space separated)")
     p.add_argument("--timestamp", type=str, help="report filename stem (caller supplies a real timestamp)")
+    p.add_argument(
+        "--emit-manifest-skeleton",
+        type=str,
+        metavar="SLUG",
+        help="write an empty sections.json skeleton for <slug>, never reads golden.json",
+    )
+    p.add_argument(
+        "--out",
+        type=str,
+        help="output path for --emit-manifest-skeleton (default evals/menus/<slug>/sections.json)",
+    )
     return p
 
 
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+    if args.emit_manifest_skeleton:
+        out_path = Path(args.out) if args.out else None
+        return cmd_emit_manifest_skeleton(args.emit_manifest_skeleton, out_path)
     if args.check:
-        return cmd_check()
+        return cmd_check(args)
     if args.url_smoke:
         return cmd_url_smoke(args)
     if args.all or args.menu:
