@@ -93,6 +93,16 @@ menu ever prints it inline that way rather than on its own description line
 beneath the name) strips too, since neither one is naming what a combo
 bundles.
 
+**A row printing two names at one price is one item.** When the menu prints
+two dish names on a single row sharing one price (a dual-name row), that row
+is one item, and `name` carries the full printed name exactly as written,
+both dishes included. A menu printing two rows at two separate prices is two
+items, even when the two rows describe similar or related dishes. This rule
+holds uniformly across every menu, even where different menus print the
+pattern differently. Never split a dual-name row into two items for filtering
+purposes: filter facets are built from `ingredients`, not from `name`, so a
+dual-name row is fully searchable as one item without being divided.
+
 ## Ingredient naming
 
 Ingredients are the single most important field for this app, because every
@@ -117,35 +127,51 @@ that searing only marks the surface of the fish; the center stays raw, so the
 word "seared" is carrying `is_raw` evidence, not decoration, and stripping it
 would silently corrupt the raw/cooked signal for that item.
 
-**Preparation methods strip from ingredient names, with a closed exception
-list.** Most preparation-method words describing how a filling was cooked
-strip away, leaving the base ingredient: "chopped scallop" becomes `scallop`,
-"deep fried eel" becomes `eel`, "deep fried tofu" becomes `tofu`. The same
-stripping applies however many words the preparation method takes and
-whatever base ingredient it modifies, including compound and multi-word
-bases: "deep fried soft shell crab" becomes `soft shell crab` (only "deep
-fried" strips; "soft shell" is part of the ingredient type, not a
+**Preparation methods strip from ingredient names, enforced by a closed
+exception list of seven.** Most preparation-method words describing how a
+filling was cooked strip away, leaving the base ingredient: "chopped scallop"
+becomes `scallop`, "deep fried eel" becomes `eel`, "deep fried tofu" becomes
+`tofu`. The same stripping applies however many words the preparation method
+takes and whatever base ingredient it modifies, including compound and
+multi-word bases: "deep fried soft shell crab" becomes `soft shell crab`
+(only "deep fried" strips; "soft shell" is part of the ingredient type, not a
 preparation word), "chopped spicy salmon" becomes `spicy salmon` (only
 "chopped" strips; "spicy salmon" is the locked compound ingredient from the
 rule above), "sauteed steak" becomes `steak`, "sliced jalapeno" becomes
 `jalapeno`, and "baked salmon" becomes `salmon`. This keeps the filter facets
 clean, since a diner filtering for "scallop" wants every scallop dish
-regardless of how each one was diced or cooked. There is a
-closed, explicit list of exceptions where the preparation word does not
-strip, currently exactly four: `pickle` (never folded into "cucumber", even
-when the pickle is cucumber-based), `mayo` (preferred spelling over "mayo
-sauce", the word does not strip to nothing), and `fried garlic` and `fried
-onion` (both stay whole; "garlic" and "onion" alone would lose the distinctive
-crunchy-topping meaning that recurs across menus). The general test behind
-this list, if you encounter a preparation-method compound not covered above:
+regardless of how each one was diced or cooked.
+
+The stated principle behind this rule is rationale only, never something to
+reason from directly on a new case: a preparation that produces a materially
+different food stays whole, while a plain cooking or cutting method strips.
+Enforcement is instead an explicit, closed exception list of exactly seven
+members, checked against directly rather than re-derived from the principle
+each time: `pickle` (never folded into "cucumber", even when the pickle is
+cucumber-based), `mayo` (preferred spelling over "mayo sauce", the word does
+not strip to nothing), `fried garlic` and `fried onion` (both stay whole;
+"garlic" and "onion" alone would lose the distinctive crunchy-topping meaning
+that recurs across menus), `tempura` (the batter is wheat, so keeping it
+attached to the base ingredient carries an allergy-relevant exclusion-filter
+signal that stripping would erase), `smoked` (stays whole as the full
+compound, for example "smoked salmon", never shortened to "salmon"), and
+`cajun` (stays whole as the full compound the same way). A list you check
+against produces consistent labels across items and menus; a principle you
+reason about item by item produces variance, which is why enforcement is the
+list, not the rationale.
+
+A general test exists as the diagnostic that originally justified the list,
+useful only if you encounter a preparation-method compound not covered above:
 a preparation-method compound that recurs across multiple items on the same
 menu as a named garnish or component (the same pattern as pickle or the fried
 alliums) behaves like a canonical ingredient in its own right, not a
 strippable modifier, and should stay whole rather than being stripped by
-default. But treat this test as diagnostic, not license to grow the exception
-list yourself: the list you should actually strip against is the four items
-named above, exactly as named, unless a future revision of this document adds
-to it. When in doubt on an ambiguous case, prefer stripping (the default
+default. Treat this test as the diagnostic behind the list and subordinate to
+it, never as license to grow the exception list yourself: the list you
+actually strip against is the seven items named above, exactly as named,
+unless a future revision of this document adds to it. List membership
+changes only through a documented convention change, never ad hoc during
+labeling. When in doubt on an ambiguous case, prefer stripping (the default
 behavior) over inventing a new whole-compound exception, since a
 mislabeled-as-whole ingredient fragments the filter facets more than an
 over-stripped one does. Ingredients are always transcribed as printed on the
@@ -194,7 +220,26 @@ rule generalized: never add specificity that the menu did not print for the
 item in front of you, even when you have good reason from context to believe
 it. Unifying variants like "freshwater eel" and plain "eel" into one filter
 facet is a job for the deterministic alias table on the client, applied after
-extraction, not something to pre-resolve yourself during labeling.
+extraction, not something to pre-resolve yourself during labeling, governed
+by the alias-unification principle described next.
+
+**Anatomical parts stay whole and are never treated as synonyms for the base
+fish.** Terms like "salmon skin," "salmon collar," and "yellowtail collar"
+name a specific cut, not the whole fish, and a diner filtering on them is
+looking for that specific cut. Never fold an anatomical part into its base
+fish name during labeling; that distinction is real and diners actually use
+it.
+
+The general principle behind this rule, and behind the freshwater-eel-to-eel
+and roe-family unifications described above: unifying variants into one
+canonical form is a downstream, client-side job, never something you resolve
+during labeling. Anatomical parts, preparation-method compounds, and distinct
+species are each their own food, not a variant spelling of another one, so
+none of them get folded into a different canonical term at the labeling
+stage. Label strictly from what a given item's own printed text says; do not
+pre-resolve which printed forms are "the same food" as another one, since
+that judgment belongs to the deterministic alias table applied after
+extraction, not to you.
 
 **An item's own printed name qualifier strips from that item's
 ingredient, the complement to the rule just above.** The rule above
@@ -222,24 +267,42 @@ entirely. If the same item also names specific ingredients alongside the
 vague phrase, list the specific ones normally and put only the vague
 remainder in notes.
 
-**Wrap is a dedicated field, never an ingredient.** The physical wrapper
-around a roll is never listed inside `ingredients`; it always goes in the
-separate `wrap` field, which takes exactly one of five values: `nori`,
-`soy_paper`, `rice_paper`, `none`, or `unknown`. This enum is closed and never
-grows. Nigiri and sashimi are always `wrap: "none"`, since there is no
-wrapper. Standard rolls default to `wrap: "nori"` unless the menu explicitly
-says otherwise (soy paper wrap, rice paper wrap, and so on are common
-upgrades worth reading for). Specialty physical wraps that are not one of the
-four named materials, such as a roll wrapped in cucumber, avocado, or a layer
-of fish instead of nori, use `wrap: "none"` plus a note naming the actual
-wrapper in `notes`, since the enum has no slot for them and inventing one
-would break the schema's closed set.
+**Conditional ingredients are included in `ingredients`, not deferred to
+`notes`.** An addition offered only under certain conditions, for example an
+ingredient available only during a happy-hour window, still goes directly
+into `ingredients` rather than being pushed into `notes` as a caveat.
+Under-listing is the more expensive error for exclusion filtering: a diner
+filtering out an allergen needs to see that ingredient on the filter chip
+even when its presence is conditional, since missing it would let a matching
+dish slip past their exclusion undetected.
+
+**Wrap is a dedicated field, never listed only as an ingredient.** The
+physical wrapper around a roll always goes in the separate `wrap` field,
+which takes exactly one of five values: `nori`, `soy_paper`, `rice_paper`,
+`none`, or `unknown`. This enum is closed and never grows. Nigiri and sashimi
+are always `wrap: "none"`, since there is no wrapper. Standard rolls default
+to `wrap: "nori"` unless the menu explicitly says otherwise (soy paper wrap,
+rice paper wrap, and so on are common upgrades worth reading for). Specialty
+physical wraps that are not one of the four named materials, such as a roll
+wrapped in cucumber, avocado, or a layer of fish instead of nori, use `wrap:
+"none"` plus a note naming the actual wrapper in `notes`, and also name the
+wrapper in `ingredients`: since the enum is closed and has no slot for a
+specialty wrapper as its own value, `ingredients` is the only place the fact
+survives as a filterable attribute a diner can actually search on.
 
 **Rice is never listed as an ingredient.** It is the universal assumed base
 for nigiri and rolls alike; listing it on every single item adds volume to
 the ingredients array without adding any filtering signal, since a diner
 browsing a sushi menu already assumes rice is present unless a wrap or notes
 field says otherwise.
+
+**Crispy rice is a documented carve-out to this rule.** When a menu item is
+built around crispy rice (for example a crispy rice appetizer with a fish
+topping), crispy rice is a named essential preparation in its own right, not
+the plain rice base every roll and nigiri already assumes, so it is listed
+as an ingredient. Transcribe it exactly as "crispy rice"; never shorten it to
+just "rice", since "rice" alone falls back under the base-rice rule above and
+would disappear from the ingredients array.
 
 **`is_raw` tracks the served item, not every component inside it.** Set
 `is_raw: true` when the item contains raw fish, including seared
@@ -301,7 +364,9 @@ five options or fewer (for example, "choice of salmon, tuna, yellowtail, or
 eel" as the protein in an otherwise fixed roll), should enumerate all of the
 option ingredients directly in `ingredients`, since five or fewer options is
 still small enough that listing them keeps the filter meaningfully useful
-rather than universally matching.
+rather than universally matching. Stated explicitly as its own rule,
+consistent with the sizes above: small choice sets are included in
+`ingredients`; large choice sets stay in `notes` only.
 
 A combo or set item is often printed as a bold name and price with a smaller
 description or contents line underneath it (for example, a special named
@@ -345,6 +410,20 @@ correction flow, so use the exact word `INFERRED`, not a paraphrase like
 "guessed" or "assumed." These labels are the ones most likely to need a
 human correction later, and the literal token is how the app and any human
 reviewer finds them.
+
+The `INFERRED` token's scope is ingredient-only. If you are also inferring a
+preparation detail the menu did not print (guessing a cooking method, for
+example), record that separately as ordinary lowercase prose in `notes`;
+never attach the `INFERRED` token to a preparation guess, since the token's
+job is to flag inferred ingredients specifically, not inferred prose in
+general.
+
+The token takes two forms, chosen by how much of the item's ingredient list
+was inferred. When an item mixes printed and inferred ingredients, name
+exactly the inferred ones, itemized, in `notes`, for example `INFERRED: crab,
+avocado, cucumber`. Reserve the whole-list form, `INFERRED ingredients`, for
+items where every ingredient in the list was inferred, with nothing printed
+to go on at all.
 
 ## Output discipline
 

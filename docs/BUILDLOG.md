@@ -1811,3 +1811,268 @@ to expand `ROMAJI_LEXICON` (starting candidate: `tai`), and how to
 disambiguate an item's own romaji from a romaji term inside a component
 list, before the WARN count is used to drive any romaji-convention
 decision.
+
+---
+
+## Session 2026-08-06: P1-SC part 1, system.md mirror, alias edits, blocked receipt
+
+Base commit: e8f96e1
+
+### Authorized scope (verbatim build card)
+
+BUILD CARD: P1-SC, system.md mirror, alias edits, full-suite baseline. Mirror
+the ten locked conventions from evals/menus/README.md into
+shared/prompts/system.md (zero spend); three shared/aliases.json edits (zero
+spend); a rule-governed reviewer rename check in system.md (zero spend); the
+offline lint gate before and after (zero spend); one paid --all run (roughly
+$0.45) producing an eval report with two aggregations (all 10 menus, and 9
+excluding km-sushi-dinner) plus consistency recorded NOT MEASURED; one commit
+of the prompt, alias, and report changes together with this entry. Not
+touching: any golden.json, evals/run_evals.py, evals/menus/README.md,
+ROMAJI_LEXICON and assert F, normalize_ingredient and all scoring/matching/
+merge/dedupe/gate logic, evals/accepted_vocabulary.json, src/*, docs/SPEC.md,
+PLAN.yaml, .dev.vars, .envrc, wrangler config.
+
+### Pre-flight
+
+1. `git rev-parse HEAD` and `git rev-parse origin/main` both `e8f96e1`. Pass.
+2. `git status --porcelain` empty. Pass.
+3. Six paths resolved by `realpath`: shared/prompts/system.md,
+   shared/aliases.json, evals/menus/README.md, evals/run_evals.py,
+   evals/reports/, docs/BUILDLOG.md. Pass.
+4. README read in full (221 lines), ten conventions extracted verbatim before
+   any system.md edit.
+5. `env -u ANTHROPIC_API_KEY uv run evals/run_evals.py --check`: 10 menus,
+   355 items, 0 ERROR, 34 WARN, 20 SKIP, exit 0. Matches the card's
+   expectation exactly.
+6. `ANTHROPIC_API_KEY` confirmed present in env by name, not value, ahead of
+   the paid step.
+
+### Amendments authorized during plan review, before execution
+
+- **C-1**: alias edit (a), removing a `smoked salmon` to `salmon` mapping,
+  is a verified no-op. No such mapping exists in shared/aliases.json to
+  remove; the card anticipated one that was never there. `lox`, `nova`, and
+  `smoked sake` measure zero occurrences in any golden's `ingredients` array
+  (the lone `nova` substring hit is the printed item name "Casanova",
+  km-sushi-special-rolls n=29). Oversight confirmed: do not add the three
+  inward aliases either, since the alias direction rule requires direction
+  measured from real printed data, and there is none. Step 2 shipped as two
+  edits, not three.
+- **C-2**: wrap accuracy is not a gate. `GATES` in evals/run_evals.py has four
+  keys plus consistency; wrap is not among them, and `aggregate()` never
+  touches it. Oversight confirmed: report wrap in both aggregation tables as
+  an unweighted mean over menus with wrap data, annotated "(no gate,
+  unweighted mean)", computed by hand from the harness's own per-menu table
+  at zero extra spend. No scratchpad wrapper built.
+- **C-3**: the Step 3 reviewer rename is governed by a rule, not by the
+  card's cited count of one occurrence. Rule: a generic reviewer/end-user
+  reference renames to "the reviewer" or "the user"; a reference genuinely
+  requiring Tom specifically (golden verification, hand corrections, spend
+  authorization) is kept; an ambiguous case is kept and flagged, never
+  guessed. Applied to shared/prompts/system.md, the file in scope, the
+  measured count was zero both before and after the Step 1 edits, so the
+  disposition set is empty.
+- **Rider 1** (numbering precedence): evals/menus/README.md is the source of
+  truth for convention content and placement. The "convention 1" through
+  "convention 10" labels used in this entry and in the c6f980d entry are
+  identifiers borrowed from that prior entry's narrative for readability;
+  the README itself carries no numbering on its bullets. No divergence was
+  found between the borrowed labels and README bullet content this session.
+- **Rider 2**: the explanation offered for the c6f980d entry's "system.md 1"
+  figure (a case-insensitive grep matching the word "bottom" at
+  shared/prompts/system.md:34, "top to bottom, left column...") is INFERRED,
+  not established. Session A's actual command does not survive anywhere in
+  the repo or this session's context; the inference rests only on "bottom"
+  being the sole case-insensitive `tom` match in the file.
+- **Rider 3** (this section): correcting the c6f980d figure inside this
+  append-only log, not by chat report alone. The c6f980d entry's manifest
+  line reads "shared/prompts/system.md 1" for the reviewer-rename occurrence
+  count. Measured this session, twice (before and after the Step 1 mirror
+  edits): zero. `git log -- shared/prompts/system.md` shows the file
+  unchanged between 439398e and this session's edits, so the figure was
+  wrong when it was written, not made stale by a later edit. Cause:
+  INFERRED per Rider 2 above, not established. The c6f980d entry itself is
+  not edited; this is the later correcting record.
+
+### Manifest (files touched)
+
+- `shared/prompts/system.md`: six edits mirroring the ten README
+  conventions (two of the ten, prep-strip list expansion and general-test
+  subordination, landed as one combined edit at the same paragraph).
+  Verified faithful to README wording at each edit site. New paragraph in
+  `## Item names` (dual-name rows). Rewrote the prep-strip exception block
+  in `## Ingredient naming` from four to seven members, with the principle
+  restated as rationale only and the list as what the model checks against.
+  New paragraph pair after the species-qualifier block (anatomical parts;
+  labeling-facing half of the alias-direction principle, aliases.json
+  mechanics deliberately excluded since the model never applies aliases).
+  New paragraph (conditional ingredients) before the rewritten wrap
+  paragraph (specialty wraps now also name the wrapper in `ingredients`).
+  New paragraph (crispy rice carve-out) after the rice paragraph. One
+  appended sentence in `## Combo and choice-set items` (explicit small/large
+  choice-set statement; the section was already faithful in substance).
+  Two appended paragraphs in `## Inferred ingredients for undescribed
+  items` (INFERRED token's ingredient-only scope; itemized vs. whole-list
+  forms). PRICE SORT KEY confirmed absent before and after by grep. Zero
+  em dashes introduced, confirmed by grep for U+2013/U+2014/U+2015. File
+  grew 22860 to 27792 chars.
+- `shared/aliases.json`: two edits. `katsuo bushi: bonito flake` flipped to
+  `bonito flake: katsuo bushi` (katsuo bushi is the printed form, 1 golden
+  occurrence vs. 0 for bonito flake). `anago: eel` removed (anago is
+  saltwater conger, a different species from unagi; 0 golden occurrences
+  either way, so the removal is zero blast radius per the alias direction
+  rule). 12 entries to 11. The five card-named entries (`freshwater eel`,
+  `unagi`, `tamago`, `mayo sauce`, `ebi`) confirmed untouched by direct
+  read. Edit (a) recorded as a verified no-op per C-1 above.
+- `shared/prompts/system.md` / Step 3: no edit. Disposition set measured
+  empty (see C-3 above); reported, not silently reconciled against the
+  card's cited count of one.
+- `docs/BUILDLOG.md`: this entry.
+- No `evals/reports/*.md` file this commit. See "Blocked receipt" below.
+- No `golden.json` anywhere was modified. `git diff --stat` confirms only
+  shared/prompts/system.md, shared/aliases.json, and docs/BUILDLOG.md
+  changed.
+- `evals/run_evals.py` not modified.
+
+### Step 4: offline lint gate, before and after
+
+| | Menus | Items | ERROR | WARN | SKIP | Exit |
+|---|---|---|---|---|---|---|
+| Pre-edit | 10 | 355 | 0 | 34 | 20 | 0 |
+| Post-edit | 10 | 355 | 0 | 34 | 20 | 0 |
+
+Zero delta in WARN or SKIP. Explained, not waved through: every WARN/SKIP in
+both runs comes from assert C (missing sections.json sidecars), assert D
+(adjacent-equal price pairs, a layout signal), or assert F (missing romaji),
+none of which the alias edits touch. The only assert the edits could affect
+is assert E (vocabulary lookup), and both edited terms have zero surface
+area on the changed side: `anago` and `bonito flake` each measure zero
+occurrences in any golden's `ingredients` array, and `katsuo bushi` (1
+occurrence) stays in accepted_vocabulary.json as a literal string regardless
+of which direction the alias table now points, since assert E re-normalizes
+both the tested string and the vocabulary entry at lookup time through
+`normalize_ingredient(x, aliases)`. No vocabulary entry became unreachable.
+
+### Blocked receipt: Step 5 crashed twice, no report produced
+
+Both attempts used the same command:
+`uv run evals/run_evals.py --all --timestamp 2026-08-06-p1-sc-all`
+
+Both raised the identical unhandled exception at the identical call site,
+`_extract_json()` parsing an index-pass response inside
+`_run_photo_pipeline()`:
+
+```
+Attempt 1: json.decoder.JSONDecodeError: Unterminated string starting at:
+           line 1 column 4665 (char 4664)
+Attempt 2: json.decoder.JSONDecodeError: Unterminated string starting at:
+           line 1 column 4679 (char 4678)
+```
+
+Neither attempt reached `write_report()`; `evals/reports/` is unchanged from
+before this session, and per-run token usage (`all_call_usages`) is held
+only in an in-memory list in `cmd_run()` with no incremental persistence, so
+whatever calls succeeded before each crash have their usage lost, not
+merely unreported.
+
+Oversight declined a third blind `--all` retry and declined single-menu
+diagnostic runs (both would spend further before hardening). Zero-spend
+diagnosis performed instead:
+
+- `INDEX_MAX_TOKENS = 2048` (evals/run_evals.py:70), the cap on the call
+  that crashed both times.
+- Arithmetic check, UNCERTAIN (a rough heuristic, not a token count from
+  the API, which was never captured): at roughly 4 characters per token for
+  mixed English/JSON text, 2048 tokens is roughly 8192 characters of
+  budget. Both crash points (character 4664 and 4678) fall at roughly 57%
+  of that estimated budget, around 1166 to 1170 tokens by the same
+  heuristic. On this arithmetic, the truncation does not obviously look
+  like it hit the 2048-token ceiling; it reads more consistent with a
+  transport or stream-level cutoff unrelated to the token budget, which
+  has a documented precedent in this repo (e8f96e1's commit message
+  references a prior run "re-proven after transport failure"). This is
+  reported as the best-supported reading of the arithmetic, not as a
+  confirmed cause: the harness keeps no raw-response log, so the actual
+  truncated payload and its real token count are unrecoverable from either
+  crashed attempt.
+- Which menu or photo crashed is UNCERTAIN: `cmd_run()` prints nothing
+  per-menu, only at the very end via `write_report()`, so neither crash
+  left any trace of progress. INFERRED, not established: `masa-sushi` is
+  the likeliest candidate. All 9 KUU menus completed the full pipeline
+  without crashing in the 2026-07-23-all-r1.md report (confirmed by direct
+  read: nine per-menu rows, all populated, no masa-sushi row since its
+  golden did not exist yet). `masa-sushi`'s golden was added later
+  (8f36da3) and has never been run through `--all` or `--menu` before this
+  session; it is also the largest golden by a wide margin (133 items
+  across 2 photos, versus the next largest at 48). The inference rests on
+  "never run before, largest by far" as the standing risk factor, not on
+  any direct evidence from either crash.
+- Estimated spend across both crashed attempts: roughly $0.80 to $0.90,
+  UNCERTAIN, console-pending. This is CARD-ASSERTED arithmetic (two
+  attempts at the card's own ~$0.45 single-run estimate), not measured:
+  the harness's own token accounting was never reached by either crash, so
+  no actual figure exists in this repo to cite. The real number is
+  whatever the Anthropic console shows for this window; it is not
+  reconciled here.
+
+### Deviation from the build card, explicit
+
+The card's Step 6 specifies one commit carrying the prompt, alias, and
+report changes together with this entry. That is not possible this
+session: the report does not exist, because the run that would produce it
+is blocked by the harness defect described above. Per oversight's explicit
+instruction, this commit (part 1) ships the prompt and alias changes with
+this entry alone; a future commit (part 2, under a fresh card) ships the
+eval report once the harness issue is understood and a successful `--all`
+run completes. The prompt change therefore lands one commit ahead of its
+own eval receipt. This is named here as a deviation, not folded into the
+manifest silently.
+
+### Findings for Tom (report-only, no further edits made)
+
+- **Harness gap 1**: the index-pass call (`_run_photo_pipeline`,
+  evals/run_evals.py around line 1113) has no retry and no defensive
+  handling around a malformed or truncated JSON response. The details pass
+  has a one-shot domain retry for items missing after the first batch
+  (`details_retry`); the index pass has nothing equivalent, and a bad
+  response there is fatal to the whole `--all` run via an uncaught
+  exception.
+- **Harness gap 2**: `cmd_run()` accumulates `all_call_usages` only in a
+  local Python list and calls `write_report()` once, at the very end.  A
+  crash on menu N loses all usage and cost accounting for menus 1 through
+  N-1, even though real spend was incurred for them. There is no
+  incremental report or usage checkpoint.
+- **Harness gap 3**: there is no raw-response logging anywhere in the
+  pipeline. When `_extract_json()` fails, the malformed payload that
+  caused the failure is gone; diagnosis is limited to the exception
+  message and character offset, with no way to inspect what the model
+  actually returned. Both crashes this session were diagnosed by
+  arithmetic inference alone, not by reading the actual failing response.
+- Session B (owner of evals/run_evals.py) is the appropriate owner for
+  hardening any of the above; none were touched this session per explicit
+  scope.
+
+### Patterns established
+
+- A card's spend-gate language ("no re-runs without returning to
+  oversight") earns its keep exactly at a crash like this one: the second
+  crash, at nearly the same character offset as the first, was the signal
+  to stop treating the failure as transient and escalate instead of
+  retrying a third time blind.
+- When a crash prevents the harness's own accounting from ever running,
+  reaching for CARD-ASSERTED arithmetic ("roughly N attempts at roughly $X
+  each") and tagging it as such is more honest than a report that omits
+  a cost line entirely because no measured figure exists.
+- Correcting a prior append-only entry's wrong figure belongs in a later
+  append-only entry (Rider 3), not only in a chat transcript that will not
+  travel with the repo.
+
+### Single next action
+
+Oversight's call, likely as a fresh hardening card: whether to harden the
+index-pass call (retry on parse failure, raw-response logging, incremental
+usage persistence) before attempting Step 5 again, and whether to run a
+single-menu diagnostic on `masa-sushi` first once that hardening exists, to
+confirm or rule out the INFERRED culprit named above before spending on
+another full `--all` attempt.
