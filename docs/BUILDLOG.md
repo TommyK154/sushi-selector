@@ -2076,3 +2076,300 @@ usage persistence) before attempting Step 5 again, and whether to run a
 single-menu diagnostic on `masa-sushi` first once that hardening exists, to
 confirm or rule out the INFERRED culprit named above before spending on
 another full `--all` attempt.
+
+## Session 2026-08-07: P1-SB2 part 1, harness hardening and index cap (zero spend)
+
+Base commit: a9d5fe9
+
+### Authorized scope (verbatim build card)
+
+BUILD CARD: P1-SB2, harness hardening + index cap, then verified
+baseline. Code work is ZERO SPEND. Two spend gates inside the
+session, each halting for Tom's explicit go.
+
+BASELINE STATE: HEAD a9d5fe9, origin/main e8f96e1, exactly one
+commit ahead, tree clean. Any other state: HALT, print, stop.
+
+CAUSE STATUS, read before planning: two --all crashes at
+_extract_json on an index-pass response, char 4664 and 4678. Both
+candidate causes are UNCERTAIN. Do not anchor on either. Note:
+the 14-char spread between crashes is the signature of a fixed
+token ceiling (char offset varies slightly per generation),
+while two transport cutoffs within 14 chars at 4.6KB would be
+coincidence; the 4-chars-per-token arithmetic in the P1-SC entry
+is a prose ratio, and JSON tokenizes denser; the cited transport
+precedent was the Claude Code chat connection, a different layer
+from a harness API call. The discriminator is empirical and built
+into Step 3 below.
+
+PRE-FLIGHT (halt on any failure):
+1. SHAs and tree per BASELINE STATE.
+2. Read the P1-SC part 1 BUILDLOG entry: both tracebacks, the
+   three named harness gaps.
+3. Read _extract_json and EVERY call site. Read and print EVERY
+   max_tokens value in run_evals.py (index, details, any other).
+4. Free gate: env -u ANTHROPIC_API_KEY uv run evals/run_evals.py
+   --check. Expect 10 menus, 355 items, 0 ERROR, exit 0.
+
+STEP 1, ZERO SPEND, harden evals/run_evals.py:
+a. Defensive parse at every model-output JSON parse site: on
+   JSONDecodeError, write the FULL raw response text plus metadata
+   (menu slug, call type, photo, model, stop_reason, usage) to a
+   crash file under evals/crash/ (add evals/crash/ to .gitignore),
+   print the path, raise a clean labeled error naming menu and
+   call type. No silent recovery. No new auto-retries beyond the
+   existing details_retry.
+b. stop_reason on every call is recorded. If a parse SUCCEEDS but
+   stop_reason is max_tokens, that menu FAILS with a named error:
+   silently scoring truncated output is worse than crashing.
+c. Incremental usage persistence: append one JSONL line per API
+   call (timestamp, slug, call type, token counts) as calls
+   complete, so a crash never again loses accounting. Final report
+   aggregation unchanged.
+d. Per-menu progress: one stdout line at each menu start and
+   completion (slug, calls, running cost), so failures localize.
+e. Raise the index call max_tokens from 2048 to 8192. Print the
+   details cap and compute worst-case details output headroom on
+   the largest batch (masa); if worst case exceeds half that cap,
+   raise it to 8192 too and report.
+f. Offline self-test for the new crash path: synthetic truncated
+   JSON in a temp location proves the crash file is written and
+   the labeled error raised. Never a repo golden, never a real
+   API call.
+SCORING NEUTRALITY IS A HARD CONSTRAINT: no change to scoring,
+matching, merge, dedupe, gates, or normalize_ingredient. State
+explicitly in the report that no metric-computing code path
+changed. --check totals must be identical before and after.
+
+STEP 2: COMMIT 1: run_evals.py, .gitignore, BUILDLOG hardening
+entry. Do not push.
+
+STEP 3, SPEND GATE 1, HALT for Tom's explicit go (~$0.10-0.15):
+uv run evals/run_evals.py --menu masa-sushi --timestamp
+2026-08-06-p1-sb2-diag-masa
+[Step 3 and Step 4 not yet run; see "Status at commit 1" below.]
+
+NOT TOUCHING: any golden.json (zero edits, report only),
+shared/prompts/*, shared/aliases.json, shared/schema/*,
+evals/menus/README.md, evals/accepted_vocabulary.json,
+ROMAJI_LEXICON and assert F, all scoring/matching/merge/dedupe/
+gate logic, normalize_ingredient, src/*, docs/SPEC.md, PLAN.yaml,
+.dev.vars, .envrc, wrangler config.
+
+### Amendments authorized during plan review, before execution
+
+Three open questions were put to Tom via AskUserQuestion before writing the
+plan file, all three answers taken as-is, no silent interpretation:
+
+- **A-1** (details cap): the card's rule raises `DETAILS_MAX_TOKENS` only if
+  the largest batch's worst case exceeds half the cap. A normal 8-item
+  details batch measures 1911 chars on masa (does not trigger the rule by
+  itself), but the one-shot `details_retry` call is unbounded, all
+  still-missing items of a photo in a single call, and its worst case on
+  masa is roughly 12000 chars, well over half the old 2048-token cap. Tom's
+  call: raise `DETAILS_MAX_TOKENS` to 8192 alongside `INDEX_MAX_TOKENS`,
+  reasoning that a raised ceiling costs nothing unless the model actually
+  generates more, and the retry path's hazard is real even though the
+  literal batch-size case does not trigger the rule's letter.
+- **A-2** (truncation handling): a call that parses successfully but carries
+  `stop_reason == "max_tokens"` aborts the whole run, the same as a parse
+  crash, rather than failing only that menu and continuing the rest. Chosen
+  for symmetry with the existing crash path and because it keeps scoring
+  neutrality trivially provable (no new path into report assembly or the
+  aggregation input set).
+- **A-3** (usage JSONL location): `evals/usage/<stem>.jsonl`, gitignored,
+  parallel to `evals/crash/`. The committed report stays the record of note;
+  the JSONL is a local run artifact reconciled into the BUILDLOG prose at
+  commit 2, not shipped in git.
+
+### Pre-flight
+
+1. `git rev-parse HEAD` and `git rev-parse origin/main`: `a9d5fe9` and
+   `e8f96e1`. `git rev-list --left-right --count origin/main...HEAD`: `0	1`
+   (0 behind, 1 ahead). `git status --porcelain` empty. Pass, matches
+   BASELINE STATE exactly.
+2. P1-SC part 1 BUILDLOG entry read in full: both tracebacks (char 4664 and
+   4678, both `Unterminated string starting at` inside `_extract_json`
+   parsing an index-pass response), and the three named harness gaps (no
+   defensive parse/crash capture, no incremental usage persistence, no
+   per-menu progress).
+3. `_extract_json` and every call site read. `max_tokens` values, ESTABLISHED
+   by direct read before any edit:
+
+   | Constant | Line (pre-edit) | Value |
+   |---|---|---|
+   | `INDEX_MAX_TOKENS` | `evals/run_evals.py:70` | 2048 |
+   | `DETAILS_MAX_TOKENS` | `evals/run_evals.py:71` | 2048 |
+   | `URL_MAX_TOKENS` | `evals/run_evals.py:72` | 8192 |
+
+   No other `max_tokens` value exists in the file. Seven `_extract_json`
+   call sites found: sync index (`:1113`), sync details batch (`:1124`),
+   sync details retry (`:1134`), batch-API index (`:1239`), batch-API
+   details (`:1276`), batch-API details retry (`:1304`), `--url-smoke`
+   (`:1749`). All seven updated in Step 1 (below); the batch-API path is
+   written and reviewed but not exercised this session (no `--batch` run),
+   same caveat the original author of that path recorded.
+4. Free gate: `env -u ANTHROPIC_API_KEY uv run evals/run_evals.py --check`:
+   10 menus, 355 items, 0 ERROR, 34 WARN, 20 SKIP, exit 0. Matches
+   expectation exactly. Full-output md5 captured for later diffing:
+   `197766075710706f95fa43792f852db0`.
+
+### Sizing measurements, ESTABLISHED offline from `evals/menus/masa-sushi/golden.json`
+
+Computed before writing any code, to ground Step 1e's "compute worst-case
+details output headroom" instruction in a real number rather than the P1-SC
+entry's UNCERTAIN 4-chars-per-token heuristic:
+
+- masa: 133 golden items over 2 photos, roughly 66 items per index call.
+- Index-shaped JSON (n, name, section, price_text, price) for all 133 items:
+  14220 chars, roughly 7100 chars per photo. Both P1-SC crash offsets (4664,
+  4678) land at roughly 66% of that per-photo figure.
+- Worst 8-item details payload (the normal batch size): 1911 chars.
+- Worst-case `details_retry` payload (unbounded, all items of one photo in
+  one call): roughly 12000 chars. This is the number that drove A-1 above.
+
+Character-to-token conversion stays UNCERTAIN; no cause claim is made from
+this arithmetic alone. It only sizes the token caps. Step 3's usage JSONL is
+the actual measurement.
+
+### Step 1: hardening, implemented
+
+`evals/run_evals.py`, all six sub-items (a through f):
+
+- **a, defensive parse**: new `HarnessParseError` and `HarnessTruncationError`
+  exception classes; new `CallContext` dataclass (run stem, menu slug, call
+  kind, model, photo index, source path or URL) threaded through all 7
+  `_extract_json` call sites; new `_write_crash_file()` writes the FULL raw
+  response text plus `menu_slug`, `call_kind`, `photo_index`, `source`,
+  `model`, `stop_reason`, all four usage counters, and the decoder error
+  detail, to `evals/crash/<stem>-<slug>-p<photo>-<kind>-<seq>.json` (seq is
+  `time.time_ns()`, collision-proof within a run). The crash path prints the
+  file path to stderr and raises the labeled error naming menu and call
+  kind. No silent recovery; the existing `details_retry` (a domain retry for
+  items missing after the first batch, not an error retry) is unchanged.
+- **b, stop_reason guard**: same `_extract_json`, after a successful parse,
+  checks `stop_reason == "max_tokens"`; if so, writes a crash file (the
+  parsed payload is evidence, not garbage) and raises
+  `HarnessTruncationError`. Per A-2, this aborts the run exactly like a
+  parse crash; no new code path in report assembly.
+- **c, incremental usage persistence**: new `_record_call()` helper replaces
+  every inline `call_usages.append(CallUsage(...))` at all 7 sites. It
+  appends to the in-memory list exactly as before, and also appends one
+  JSONL line to `evals/usage/<stem>.jsonl` (timestamp, stem, slug,
+  photo_index, kind, model, all four token counts, stop_reason), opened in
+  append mode and flushed per line. Called before `_extract_json`, so the
+  usage for a call that then fails to parse is still captured, not only
+  usage for calls before it. `write_report()`'s signature and the totals it
+  computes are unchanged; it still receives the same `all_call_usages` list.
+- **d, per-menu progress**: `cmd_run()` now prints one flushed stdout line at
+  each menu's start (slug, photo count) and one at completion (slug, call
+  count, running cost via the existing `estimate_cost(_sum_usage(...))`, no
+  new cost math), numbered `[i/N]`.
+- **e, token caps**: `INDEX_MAX_TOKENS` 2048 to 8192.
+  `DETAILS_MAX_TOKENS` 2048 to 8192 per A-1. `URL_MAX_TOKENS` unchanged at
+  8192. Table again, post-edit:
+
+  | Constant | Old | New |
+  |---|---|---|
+  | `INDEX_MAX_TOKENS` | 2048 | 8192 |
+  | `DETAILS_MAX_TOKENS` | 2048 | 8192 |
+  | `URL_MAX_TOKENS` | 8192 | 8192 (unchanged) |
+
+- **f, offline self-test**: new `_crash_path_self_test()`, hooked into
+  `cmd_check()` beside the existing `_self_test()` / `_lint_self_test()` /
+  `_schema_composition_self_test()` calls, following their established
+  pattern. Uses `tempfile.TemporaryDirectory()` (already imported, already
+  used at the manifest-skeleton self-test) as a swapped-in `CRASH_DIR`, and
+  two synthetic `_FakeResp` objects (never a repo golden, never an API
+  call): one with truncated, unterminated JSON (asserts a crash file is
+  written containing the FULL raw text and expected metadata, and that
+  `HarnessParseError` is raised naming the menu and kind), one with valid
+  JSON but `stop_reason == "max_tokens"` (asserts `HarnessTruncationError`
+  is raised). The two "crash file written" stderr lines the self-test's own
+  crashes would otherwise print are swallowed with
+  `contextlib.redirect_stderr(io.StringIO())`, so `--check`'s output gains
+  exactly one new line (the self-test's own PASS line), not four.
+
+### Scoring neutrality: verified, not asserted
+
+`git diff evals/run_evals.py` reviewed hunk by hunk. Grepped for every name
+on the untouched list (`normalize_ingredient`, `normalize_name`,
+`match_items`, `ingredient_sets`, `f1`, `price_matches`, `score_menu`,
+`aggregate`, `evaluate_gates`, `_fuzzy_merge`, `_merge_details_into_index`,
+every `_assert_a` through `_assert_g`, `lint_menu`, `GATES`,
+`NAME_MATCH_THRESHOLD`) against the diff: zero hits. None of those functions
+or constants appear anywhere in the changed lines. The only functions with
+changed signatures are pipeline orchestration (`_run_photo_pipeline`,
+`run_pipeline_for_menu`, `_run_pipeline_for_menu_batch`, `_extract_json`),
+none of them scoring, matching, merge, dedupe, or gate code.
+
+`--check` full-output diff, `ANTHROPIC_API_KEY` unset, before vs after
+(captured via `git stash` / `git stash pop` on the same tree so both runs
+saw identical goldens):
+
+```
+22a23
+> crash-path self-test: PASS (synthetic truncated JSON in a temp dir, no repo golden, no API call)
+```
+
+One line added, nothing else. Line counts: 92 before, 93 after. Totals row
+identical both sides: `lint totals: 0 ERROR, 34 WARN, 20 SKIP`. Menu count
+(10) and item count (355, summed from the per-menu `golden items` lines)
+identical. Exit code 0 both times.
+
+`uv run --no-project python -m py_compile evals/run_evals.py`: clean.
+
+### Manifest (files touched, this commit)
+
+- `evals/run_evals.py`: hardening per Step 1a-f above. 293 insertions, 33
+  deletions. No `golden.json` anywhere touched (confirmed by `git diff
+  --stat`, only `evals/run_evals.py`, `.gitignore`, and this entry appear).
+- `.gitignore`: two lines added, `evals/crash/` and `evals/usage/`, with a
+  comment explaining both are local run artifacts and the committed report
+  stays the record of note.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: any `golden.json`, `shared/prompts/*`, `shared/aliases.json`,
+  `shared/schema/*`, `evals/menus/README.md`,
+  `evals/accepted_vocabulary.json`, `ROMAJI_LEXICON`, `src/*`,
+  `docs/SPEC.md`, `PLAN.yaml`, `.dev.vars`, `.envrc`, wrangler config.
+  Confirmed by `git diff --stat` showing exactly the three paths above.
+
+### Status at commit 1: Steps 3, 4, 5 not yet run
+
+This entry covers Step 1 (hardening) and Step 2 (this commit) only. Step 3
+(spend gate 1, the masa-sushi diagnostic run and cause discriminator) and
+Step 4 (spend gate 2, the `--all` baseline) both require Tom's explicit go
+before any API spend, per the card's two spend gates and per
+[[feedback_intervention_gates]] (flag human-gate steps explicitly, stop
+before any API-credit spend until Tom confirms). Neither has been requested
+yet as of this commit. Step 5 (commit 2, both report files plus BUILDLOG
+part 2 with JSONL-to-report reconciliation) follows only after Step 4
+completes.
+
+### Patterns established
+
+- A build card's "compute worst-case X, raise the cap only if it exceeds
+  half" rule can read two ways when the call site in question is unbounded
+  (here, `details_retry`) rather than fixed-size (the normal 8-item batch).
+  Surfacing both readings to Tom as an explicit question, rather than
+  picking one silently, is the correct move exactly when the card's own
+  arithmetic doesn't resolve which call site the rule was written against.
+- Recording usage (`_record_call`) before attempting to parse
+  (`_extract_json`), not after, means a crashing call's own token spend is
+  never lost, not just the calls that came before it. This is a stronger
+  reading of the card's "so a crash never again loses accounting" than
+  "everything up to but not including the crash."
+- Swallowing a self-test's own side-effect stderr output
+  (`contextlib.redirect_stderr`) is necessary once a self-test exercises a
+  code path that itself prints, or the "one line added" neutrality claim in
+  Step 1h breaks on a technicality (four lines added, not one) even though
+  the actual check-relevant totals (menus, items, ERROR/WARN/SKIP, exit
+  code) never moved.
+
+### Single next action
+
+Report Step 1 and commit 1 complete to Tom; halt for explicit go on Step 3
+(`uv run evals/run_evals.py --menu masa-sushi --timestamp
+2026-08-06-p1-sb2-diag-masa`, roughly $0.10 to $0.15), the empirical
+discriminator between the two candidate causes named in the card's CAUSE
+STATUS section.

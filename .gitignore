@@ -11,6 +11,12 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Eval harness run artifacts (P1-SB2): crash dumps and incremental usage
+# JSONL are local run evidence, not committed. The eval report in
+# evals/reports/ stays the committed record of note.
+evals/crash/
+evals/usage/
+
 # OS junk
 .DS_Store
 Thumbs.db

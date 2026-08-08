@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
+import io
 import json
 import os
 import re
@@ -59,6 +61,8 @@ SCHEMA_DIR = SHARED / "schema"
 ALIASES_PATH = SHARED / "aliases.json"
 MENUS_DIR = REPO_ROOT / "evals" / "menus"
 REPORTS_DIR = REPO_ROOT / "evals" / "reports"
+CRASH_DIR = REPO_ROOT / "evals" / "crash"
+USAGE_DIR = REPO_ROOT / "evals" / "usage"
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -67,8 +71,19 @@ NAME_MATCH_THRESHOLD = 85
 
 # Anthropic request-shape constants, mirroring src/extract.ts exactly so
 # evals exercise the same request shapes production sends.
-INDEX_MAX_TOKENS = 2048
-DETAILS_MAX_TOKENS = 2048
+#
+# P1-SB2: both raised from 2048 to 8192. INDEX_MAX_TOKENS raised because two
+# --all crashes (P1-SC) truncated an index-pass response at roughly 66% of
+# masa-sushi's full index payload; masa needs roughly 7100 chars per photo,
+# and 2048 tokens was cutting it close on the largest golden. DETAILS_MAX_TOKENS
+# raised because the one-shot details_retry call below is unbounded (every
+# still-missing item of a photo in one call, not batched at DETAILS_BATCH_SIZE
+# like the first pass): worst case for masa is roughly 12000 chars, well over
+# half the old cap. A normal 8-item details batch measures roughly 1911 chars
+# and is unaffected either way; raising the ceiling costs nothing unless the
+# model actually generates more.
+INDEX_MAX_TOKENS = 8192
+DETAILS_MAX_TOKENS = 8192
 URL_MAX_TOKENS = 8192
 DETAILS_BATCH_SIZE = 8  # SPEC.md: batch 1 fires solo to warm the cache, then
                          # the rest fan out (sequential here; see _run_photo_pipeline).
@@ -962,6 +977,41 @@ class CallUsage:
     usage: Usage
 
 
+class HarnessParseError(RuntimeError):
+    """Model output could not be parsed as JSON, or carried no text block.
+
+    P1-SB2: raised instead of letting json.JSONDecodeError propagate raw. The
+    full response is already on disk under evals/crash/ by the time this is
+    raised; the message names the menu and call kind so a crashed --all run
+    localizes without re-reading tracebacks against arithmetic guesses.
+    """
+
+
+class HarnessTruncationError(RuntimeError):
+    """Model output parsed cleanly but stop_reason was max_tokens.
+
+    P1-SB2: a parse success on truncated output is not treated as a pass.
+    Silently scoring truncated JSON is worse than crashing, so this call
+    fails the whole run exactly like HarnessParseError does.
+    """
+
+
+@dataclass
+class CallContext:
+    """Identifies one Anthropic call for crash-file and usage-JSONL naming.
+
+    photo_index is None only for the --url-smoke path, which has no photo;
+    source there is the URL string instead of a photo path.
+    """
+
+    run_stem: str
+    menu_slug: str
+    kind: str
+    model: str
+    photo_index: Optional[int] = None
+    source: str = ""
+
+
 def _sum_usage(call_usages: list[CallUsage]) -> Usage:
     total = Usage()
     for c in call_usages:
@@ -1005,15 +1055,121 @@ def _usage_from_response(resp: Any) -> Usage:
     )
 
 
-def _extract_json(resp: Any) -> dict:
+def _write_crash_file(ctx: CallContext, resp: Any, raw_text: Optional[str], error_detail: str) -> Path:
+    """Dump the FULL raw response plus metadata so a crash is diagnosable
+    from disk, not from arithmetic inference (P1-SC's crashes never left
+    a payload behind; this is the fix). One file per crash; the run stem,
+    menu, photo, call kind, and a time-based sequence make the name unique
+    and self-describing without needing to open it to know what happened.
+    """
+    CRASH_DIR.mkdir(parents=True, exist_ok=True)
+    photo_tag = f"p{ctx.photo_index}" if ctx.photo_index is not None else "p-"
+    seq = time.time_ns()
+    path = CRASH_DIR / f"{ctx.run_stem}-{ctx.menu_slug}-{photo_tag}-{ctx.kind}-{seq}.json"
+    usage = _usage_from_response(resp) if resp is not None else None
+    payload = {
+        "menu_slug": ctx.menu_slug,
+        "call_kind": ctx.kind,
+        "photo_index": ctx.photo_index,
+        "source": ctx.source,
+        "model": ctx.model,
+        "stop_reason": getattr(resp, "stop_reason", None) if resp is not None else None,
+        "usage": {
+            "input_tokens": usage.input_tokens if usage else None,
+            "output_tokens": usage.output_tokens if usage else None,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens if usage else None,
+            "cache_read_input_tokens": usage.cache_read_input_tokens if usage else None,
+        },
+        "error_detail": error_detail,
+        "raw_response_text": raw_text,
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def _usage_jsonl_path(run_stem: str) -> Path:
+    return USAGE_DIR / f"{run_stem}.jsonl"
+
+
+def _record_call(call_usages: list[CallUsage], ctx: CallContext, resp: Any) -> CallUsage:
+    """Append to the in-memory list exactly as before, and immediately
+    append one JSONL line to disk (P1-SB2 1e), so a crash on menu N never
+    again loses accounting for menus 1..N-1, or even for the crashing call
+    itself: this runs before _extract_json is given a chance to raise.
+    """
+    usage = _usage_from_response(resp)
+    call = CallUsage(ctx.menu_slug, ctx.photo_index if ctx.photo_index is not None else -1, ctx.kind, usage)
+    call_usages.append(call)
+    USAGE_DIR.mkdir(parents=True, exist_ok=True)
+    line = {
+        "ts": time.time(),
+        "stem": ctx.run_stem,
+        "slug": ctx.menu_slug,
+        "photo_index": ctx.photo_index,
+        "kind": ctx.kind,
+        "model": ctx.model,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+        "cache_read_input_tokens": usage.cache_read_input_tokens,
+        "stop_reason": getattr(resp, "stop_reason", None),
+    }
+    with open(_usage_jsonl_path(ctx.run_stem), "a", encoding="utf-8") as f:
+        f.write(json.dumps(line, ensure_ascii=False) + "\n")
+        f.flush()
+    return call
+
+
+def _extract_json(resp: Any, ctx: CallContext) -> dict:
     """Read json_schema-mode structured output: the first text block,
     JSON-parsed. output_config.format constrains generation, it does not
     change the response envelope (verified against live docs this session).
+
+    P1-SB2: defensive at every call site. A JSONDecodeError, or no text
+    block at all, writes the FULL raw response to evals/crash/ and raises
+    HarnessParseError naming the menu and call kind. No silent recovery, no
+    new auto-retry beyond the existing details_retry (a domain retry for
+    items missing after the first batch, untouched here). A response that
+    parses cleanly but carries stop_reason == "max_tokens" also writes a
+    crash file (the payload is evidence, not garbage) and raises
+    HarnessTruncationError: silently scoring truncated output is worse than
+    crashing.
     """
+    text_block = None
     for block in resp.content:
         if block.type == "text":
-            return json.loads(block.text)
-    raise RuntimeError("no text block in Anthropic response")
+            text_block = block.text
+            break
+
+    if text_block is None:
+        path = _write_crash_file(ctx, resp, None, "no text block in Anthropic response")
+        print(f"crash file written: {path}", file=sys.stderr)
+        raise HarnessParseError(
+            f"{ctx.menu_slug} [{ctx.kind}]: no text block in Anthropic response; "
+            f"raw response saved to {path}"
+        )
+
+    try:
+        data = json.loads(text_block)
+    except json.JSONDecodeError as e:
+        path = _write_crash_file(ctx, resp, text_block, str(e))
+        print(f"crash file written: {path}", file=sys.stderr)
+        raise HarnessParseError(
+            f"{ctx.menu_slug} [{ctx.kind}]: JSON parse failed ({e}); raw response saved to {path}"
+        ) from e
+
+    stop_reason = getattr(resp, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        path = _write_crash_file(
+            ctx, resp, text_block, "parsed successfully but stop_reason == max_tokens"
+        )
+        print(f"crash file written: {path}", file=sys.stderr)
+        raise HarnessTruncationError(
+            f"{ctx.menu_slug} [{ctx.kind}]: stop_reason == max_tokens (truncated output); "
+            f"raw response saved to {path}"
+        )
+
+    return data
 
 
 def _index_params(assets: SharedAssets, photo: Path, model: str) -> dict:
@@ -1096,6 +1252,7 @@ def _run_photo_pipeline(
     photo_index: int,
     photo: Path,
     model: str,
+    run_stem: str,
 ) -> tuple[list[dict], list[CallUsage]]:
     """index -> details in batches of 8, batch 1 solo to warm the cache,
     then the rest -> reconcile.
@@ -1109,8 +1266,9 @@ def _run_photo_pipeline(
     call_usages: list[CallUsage] = []
 
     index_resp = client.messages.create(**_index_params(assets, photo, model))
-    call_usages.append(CallUsage(menu_slug, photo_index, "index", _usage_from_response(index_resp)))
-    index_items = _extract_json(index_resp).get("items", [])
+    idx_ctx = CallContext(run_stem, menu_slug, "index", model, photo_index, str(photo))
+    _record_call(call_usages, idx_ctx, index_resp)
+    index_items = _extract_json(index_resp, idx_ctx).get("items", [])
 
     batches = [
         index_items[i : i + DETAILS_BATCH_SIZE] for i in range(0, len(index_items), DETAILS_BATCH_SIZE)
@@ -1120,18 +1278,18 @@ def _run_photo_pipeline(
     for batch_idx, batch in enumerate(batches):
         kind = "details_batch_1" if batch_idx == 0 else "details_batch_n"
         resp = client.messages.create(**_details_params(assets, photo, batch, model))
-        call_usages.append(CallUsage(menu_slug, photo_index, kind, _usage_from_response(resp)))
-        for it in _extract_json(resp).get("items", []):
+        det_ctx = CallContext(run_stem, menu_slug, kind, model, photo_index, str(photo))
+        _record_call(call_usages, det_ctx, resp)
+        for it in _extract_json(resp, det_ctx).get("items", []):
             details_by_n[it["n"]] = it
 
     # One retry batch for whatever's still missing after the first pass.
     missing = [it for it in index_items if it["n"] not in details_by_n]
     if missing:
         retry_resp = client.messages.create(**_details_params(assets, photo, missing, model))
-        call_usages.append(
-            CallUsage(menu_slug, photo_index, "details_retry", _usage_from_response(retry_resp))
-        )
-        for it in _extract_json(retry_resp).get("items", []):
+        retry_ctx = CallContext(run_stem, menu_slug, "details_retry", model, photo_index, str(photo))
+        _record_call(call_usages, retry_ctx, retry_resp)
+        for it in _extract_json(retry_resp, retry_ctx).get("items", []):
             details_by_n[it["n"]] = it
 
     merged_items = _merge_details_into_index(index_items, details_by_n)
@@ -1178,7 +1336,7 @@ def _fuzzy_merge(all_photo_items: list[list[dict]]) -> list[dict]:
 
 
 def run_pipeline_for_menu(
-    menu: Menu, assets: SharedAssets, model: str, use_batch: bool
+    menu: Menu, assets: SharedAssets, model: str, use_batch: bool, run_stem: str
 ) -> tuple[list[dict], list[CallUsage]]:
     """Run the full per-photo index/details/reconcile pipeline plus merge.
 
@@ -1187,13 +1345,15 @@ def run_pipeline_for_menu(
     the warm-then-fan-out batch ordering, so evals measure the real system.
     """
     if use_batch:
-        return _run_pipeline_for_menu_batch(menu, assets, model)
+        return _run_pipeline_for_menu_batch(menu, assets, model, run_stem)
 
     client = anthropic.Anthropic()
     per_photo_items: list[list[dict]] = []
     call_usages: list[CallUsage] = []
     for photo_index, photo in enumerate(menu.photos):
-        items, usages = _run_photo_pipeline(client, assets, menu.slug, photo_index, photo, model)
+        items, usages = _run_photo_pipeline(
+            client, assets, menu.slug, photo_index, photo, model, run_stem
+        )
         per_photo_items.append(items)
         call_usages.extend(usages)
     merged = _fuzzy_merge(per_photo_items)
@@ -1209,7 +1369,7 @@ def _poll_batch(client: "anthropic.Anthropic", batch_id: str) -> Any:
 
 
 def _run_pipeline_for_menu_batch(
-    menu: Menu, assets: SharedAssets, model: str
+    menu: Menu, assets: SharedAssets, model: str, run_stem: str
 ) -> tuple[list[dict], list[CallUsage]]:
     """Route the full per-photo pipeline through the Message Batches API.
 
@@ -1236,11 +1396,12 @@ def _run_pipeline_for_menu_batch(
     for result in client.messages.batches.results(index_batch.id):
         photo_idx = int(result.custom_id.split(":", 1)[0])
         if result.result.type == "succeeded":
-            data = _extract_json(result.result.message)
-            index_items_by_photo[photo_idx] = data.get("items", [])
-            call_usages.append(
-                CallUsage(menu.slug, photo_idx, "index", _usage_from_response(result.result.message))
+            idx_ctx = CallContext(
+                run_stem, menu.slug, "index", model, photo_idx, str(menu.photos[photo_idx])
             )
+            _record_call(call_usages, idx_ctx, result.result.message)
+            data = _extract_json(result.result.message, idx_ctx)
+            index_items_by_photo[photo_idx] = data.get("items", [])
         else:
             index_items_by_photo[photo_idx] = []
 
@@ -1270,10 +1431,11 @@ def _run_pipeline_for_menu_batch(
             batch_idx = int(result.custom_id.split(":", 1)[1])
             kind = "details_batch_1" if batch_idx == 0 else "details_batch_n"
             if result.result.type == "succeeded":
-                call_usages.append(
-                    CallUsage(menu.slug, photo_idx, kind, _usage_from_response(result.result.message))
+                det_ctx = CallContext(
+                    run_stem, menu.slug, kind, model, photo_idx, str(menu.photos[photo_idx])
                 )
-                for it in _extract_json(result.result.message).get("items", []):
+                _record_call(call_usages, det_ctx, result.result.message)
+                for it in _extract_json(result.result.message, det_ctx).get("items", []):
                     details_by_photo[photo_idx][it["n"]] = it
 
     missing_by_photo: dict[int, list[dict]] = {}
@@ -1296,12 +1458,11 @@ def _run_pipeline_for_menu_batch(
         for result in client.messages.batches.results(retry_batch.id):
             photo_idx = int(result.custom_id.split(":", 1)[0])
             if result.result.type == "succeeded":
-                call_usages.append(
-                    CallUsage(
-                        menu.slug, photo_idx, "details_retry", _usage_from_response(result.result.message)
-                    )
+                retry_ctx = CallContext(
+                    run_stem, menu.slug, "details_retry", model, photo_idx, str(menu.photos[photo_idx])
                 )
-                for it in _extract_json(result.result.message).get("items", []):
+                _record_call(call_usages, retry_ctx, result.result.message)
+                for it in _extract_json(result.result.message, retry_ctx).get("items", []):
                     details_by_photo[photo_idx][it["n"]] = it
 
     per_photo_items: list[list[dict]] = []
@@ -1494,6 +1655,12 @@ def cmd_check(args: Optional[argparse.Namespace] = None) -> int:
     _lint_self_test()
     print("lint self-test: PASS (one negative fixture per assert A-G, synthetic, no repo golden used)")
 
+    _crash_path_self_test()
+    print(
+        "crash-path self-test: PASS (synthetic truncated JSON in a temp dir, "
+        "no repo golden, no API call)"
+    )
+
     aliases = assets.aliases if assets is not None else {}
     vocabulary_raw = load_accepted_vocabulary()
     vocabulary_normalized = frozenset(normalize_ingredient(v, aliases) for v in vocabulary_raw)
@@ -1675,6 +1842,86 @@ def _self_test() -> None:
     assert abs(s.ingredient_f1_macro - 1.0) < 1e-9, s.ingredient_f1_macro
 
 
+class _FakeBlock:
+    def __init__(self, text: str) -> None:
+        self.type = "text"
+        self.text = text
+
+
+class _FakeUsage:
+    def __init__(self) -> None:
+        self.input_tokens = 111
+        self.output_tokens = 222
+        self.cache_creation_input_tokens = 0
+        self.cache_read_input_tokens = 0
+
+
+class _FakeResp:
+    """Stands in for an anthropic.types.Message: just enough shape for
+    _extract_json (.content, .stop_reason, .usage) to exercise the crash
+    path without a real API call.
+    """
+
+    def __init__(self, text: str, stop_reason: str) -> None:
+        self.content = [_FakeBlock(text)]
+        self.stop_reason = stop_reason
+        self.usage = _FakeUsage()
+
+
+def _crash_path_self_test() -> None:
+    """Offline proof of the P1-SB2 crash path (1h): synthetic truncated JSON
+    written to a temp directory shows the crash file gets written with the
+    full raw payload, and the labeled error is raised. Never a repo golden,
+    never a real API call. Restores the real CRASH_DIR when done, and
+    swallows the "crash file written" stderr lines the real path prints, so
+    --check's own output stays exactly one line longer (the PASS line),
+    which is what the neutrality check in Step 1h measures.
+    """
+    global CRASH_DIR
+    real_crash_dir = CRASH_DIR
+    with tempfile.TemporaryDirectory() as tmp:
+        CRASH_DIR = Path(tmp) / "crash"
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                # Case 1: truncated JSON, cut mid-string, unterminated.
+                truncated = '{"items": [{"n": 1, "name": "Spicy Tuna Rol'
+                ctx = CallContext("selftest", "fixture-menu", "index", "fixture-model", 0, "fixture.jpg")
+                resp = _FakeResp(truncated, "end_turn")
+                try:
+                    _extract_json(resp, ctx)
+                    raise AssertionError("expected HarnessParseError, got no exception")
+                except HarnessParseError as e:
+                    assert "fixture-menu" in str(e) and "index" in str(e), str(e)
+
+                crash_files = sorted(CRASH_DIR.glob("*.json"))
+                assert len(crash_files) == 1, f"expected 1 crash file, found {len(crash_files)}"
+                payload = json.loads(crash_files[0].read_text(encoding="utf-8"))
+                assert payload["raw_response_text"] == truncated, "crash file must hold the FULL raw text"
+                assert payload["menu_slug"] == "fixture-menu"
+                assert payload["call_kind"] == "index"
+                assert payload["stop_reason"] == "end_turn"
+                assert "usage" in payload and "error_detail" in payload
+
+                # Case 2: valid JSON, but stop_reason == max_tokens.
+                valid = json.dumps({"items": []})
+                ctx2 = CallContext(
+                    "selftest", "fixture-menu", "details_batch_1", "fixture-model", 0, "fixture.jpg"
+                )
+                resp2 = _FakeResp(valid, "max_tokens")
+                try:
+                    _extract_json(resp2, ctx2)
+                    raise AssertionError("expected HarnessTruncationError, got no exception")
+                except HarnessTruncationError as e:
+                    assert "fixture-menu" in str(e) and "max_tokens" in str(e), str(e)
+
+                crash_files_after = sorted(CRASH_DIR.glob("*.json"))
+                assert len(crash_files_after) == 2, (
+                    f"expected 2 crash files total, found {len(crash_files_after)}"
+                )
+        finally:
+            CRASH_DIR = real_crash_dir
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Full or single-menu scored run. Requires the Phase 1 pipeline."""
     model = os.environ.get("MODEL", DEFAULT_MODEL)
@@ -1699,17 +1946,28 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("ANTHROPIC_API_KEY not set", file=sys.stderr)
         return 2
 
+    # Computed before the loop (P1-SB2): it names the incremental usage JSONL
+    # (evals/usage/<timestamp>.jsonl) as well as the final report, so usage
+    # persists under the same stem from the very first call.
+    timestamp = args.timestamp or "report"
+
     all_call_usages: list[CallUsage] = []
     scores: list[MenuScore] = []
-    for menu in menus:
-        pred, call_usages = run_pipeline_for_menu(menu, assets, model, args.batch)
+    for i, menu in enumerate(menus, start=1):
+        print(f"[{i}/{len(menus)}] {menu.slug}: starting, {len(menu.photos)} photo(s)", flush=True)
+        pred, call_usages = run_pipeline_for_menu(menu, assets, model, args.batch, timestamp)
         all_call_usages.extend(call_usages)
         scores.append(score_menu(menu.slug, pred, menu.golden.get("items", []), assets.aliases))
+        running_cost = estimate_cost(_sum_usage(all_call_usages))
+        print(
+            f"[{i}/{len(menus)}] {menu.slug}: done, {len(call_usages)} call(s), "
+            f"running cost ${running_cost:.4f}",
+            flush=True,
+        )
 
     total_usage = _sum_usage(all_call_usages)
     agg = aggregate(scores)
     gate_rows = evaluate_gates(agg)
-    timestamp = args.timestamp or "report"
     path = write_report(scores, agg, gate_rows, total_usage, all_call_usages, model, timestamp)
     print(f"report written: {path}")
     all_pass = all(ok for *_x, ok in gate_rows)
@@ -1742,11 +2000,13 @@ def cmd_url_smoke(args: argparse.Namespace) -> int:
         return 2
 
     model = os.environ.get("MODEL", DEFAULT_MODEL)
+    run_stem = getattr(args, "timestamp", None) or "url-smoke"
     client = anthropic.Anthropic()
     for url in args.urls:
         try:
             resp = client.messages.create(**_url_params(assets, url, model))
-            data = _extract_json(resp)
+            ctx = CallContext(run_stem, "url-smoke", "url", model, None, url)
+            data = _extract_json(resp, ctx)
             n_items = len(data.get("items", []))
             n_sections = len(data.get("sections", []))
             print(f"{url}: {n_items} item(s), {n_sections} section(s)")
