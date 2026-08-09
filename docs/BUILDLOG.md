@@ -2373,3 +2373,204 @@ Report Step 1 and commit 1 complete to Tom; halt for explicit go on Step 3
 2026-08-06-p1-sb2-diag-masa`, roughly $0.10 to $0.15), the empirical
 discriminator between the two candidate causes named in the card's CAUSE
 STATUS section.
+
+## Session 2026-08-08: P1-SB2 part 2, discriminator run and --all baseline
+
+Base commit: cd431fd
+
+### Spend gates: both run under Tom's explicit go
+
+Both spend gates in the P1-SB2 card were blocked once at the Claude Code
+tool-permission layer (an auto-mode classifier denial, not Tom declining):
+the first direct attempt at Step 3 was denied, as was a follow-up attempt to
+configure a Bash permission rule myself via the update-config skill. Per the
+harness's own guidance (a denied call means work within the restriction, not
+around it), this was reported to Tom rather than retried through another
+tool path. Tom added the permission rule himself via `/permissions` and gave
+explicit go ("Retry Step 3, this is my go"); Step 4's go ("go, this is my
+go") came after Step 3's result was reported. Both gates are on the record
+as Tom's explicit authorization, not inferred.
+
+### Step 3: masa-sushi diagnostic run, the discriminator
+
+Command run exactly as specified:
+```
+uv run evals/run_evals.py --menu masa-sushi --timestamp 2026-08-06-p1-sb2-diag-masa
+```
+
+Result: COMPLETED. 23 calls, no crash, no `HarnessParseError`, no
+`HarnessTruncationError`. `GATES: FAIL` (exit 1), expected for a single
+weak-fit menu on its own; not a harness failure. Cost, from the run's own
+accounting: $0.1463, inside the card's $0.10-0.15 estimate.
+
+Discriminator read from `evals/usage/2026-08-06-p1-sb2-diag-masa.jsonl`:
+
+| Photo | Index call output_tokens | vs old 2048 cap | stop_reason |
+|---|---|---|---|
+| 0 | 3440 | over by 1392 (68%) | `end_turn` |
+| 1 | 1799 | under | `end_turn` |
+
+**Verdict: ESTABLISHED, by measurement, not arithmetic inference.** Photo 0's
+index call needed 3440 output tokens; the old `INDEX_MAX_TOKENS = 2048` cap
+would have cut generation off at roughly 59.5% of that (2048/3440), which
+lands close to the P1-SC crash offsets' roughly 66% of the per-photo char
+budget estimated offline before this run (a coarse char-based figure, not
+directly comparable token-for-token, but directionally consistent, not
+contradictory). Under the new 8192 cap, both calls completed with
+`stop_reason: end_turn`, no truncation.
+
+Reconciliation: JSONL sums (input 19507, output 13310, cache write 34938,
+cache read 165319) match the report's "Token usage and cost" section
+exactly. All 23 calls recorded `stop_reason: end_turn`; the truncation guard
+built in Step 1b never fired this run, correctly, since nothing was
+truncated once the cap was raised. Cache check line: 19/19 `details_batch_n`
+calls had cache reads > 0 [ok].
+
+Report: `evals/reports/2026-08-06-p1-sb2-diag-masa.md`, labeled diagnostic,
+not part of the baseline of record. Its per-item diffs (ingredient
+mismatches, price mismatches on multi-tier sushi/sashimi pricing, several
+missed/extra items) are not analyzed here; per the card, this run exists
+only to answer the discriminator question, not to critique masa-sushi's
+extraction quality.
+
+### Step 4: full `--all` baseline run
+
+Command run exactly as specified:
+```
+uv run evals/run_evals.py --all --timestamp 2026-08-06-p1-sc-all
+```
+
+Result: COMPLETED, all 10 menus, 70 calls, no crash, no truncation error.
+`GATES: FAIL` (exit 1), the card's predicted result, not a halt condition.
+Per-menu progress lines (Step 1d) printed and localized every menu; no
+localization guesswork was needed this time, unlike the two P1-SC crashes.
+Cost, from the run's own accounting: $0.5828.
+
+Reconciliation: JSONL sums (input 58959, output 36309, cache write 244566,
+cache read 365442, 70 calls total) match the report's "Token usage and
+cost" section exactly, and the per-menu call counts printed during the run
+(2, 5, 4, 4, 7, 4, 3, 9, 9, 23) sum to 70, matching the JSONL line count.
+Zero calls with a `stop_reason` other than `end_turn`, confirmed by scanning
+the full JSONL, not sampled.
+
+Cause-confirmation line, second independent measurement: masa-sushi's two
+index calls this run needed 2919 (photo 0) and 2522 (photo 1) output
+tokens, both over the old 2048 cap (by 871 and 474 respectively), both
+`end_turn` under the new cap. Two different runs, both photos of masa's
+index pass exceeding 2048 tokens on at least one photo each time: the
+max_tokens cause is not a one-photo fluke.
+
+Both required aggregation tables computed by hand from the harness's own
+per-menu breakdown table, at zero extra spend, and appended to the report
+under a clearly marked "P1-SB2 supplementary aggregation" heading; the
+harness's own Gates table, per-menu table, and token usage section above
+that heading are untouched.
+
+**(i) All 10 menus** (identical to the harness's own Gates table, restated
+for the side-by-side): item_recall 0.8282, item_precision 0.7577,
+ingredient_f1_macro 0.7286, price_accuracy 0.8333, all FAIL against their
+>= 0.97 / >= 0.97 / >= 0.90 / >= 0.97 thresholds. consistency_f1_spread_max
+NOT MEASURED. Wrap accuracy 0.9407, annotated "(no gate, unweighted mean
+over menus with wrap data)", all 10 of 10 menus have wrap data. Totals:
+gold 355, pred 388, matched 294.
+
+**(ii) 9 menus, excluding km-sushi-dinner**: item_recall 0.8605,
+item_precision 0.7989, ingredient_f1_macro 0.7447, price_accuracy 0.8412,
+all still FAIL. consistency_f1_spread_max NOT MEASURED. Wrap accuracy
+0.9341, same annotation, 9 of 9 menus have wrap data. Totals: gold 337,
+pred 363, matched 290.
+
+Method: each menu's integer `n_matched` was recovered from the harness's
+3-decimal-rounded per-menu recall and precision figures
+(`round(recall * n_gold)` cross-checked against `round(precision * n_pred)`;
+all 10 menus agreed exactly between the two derivations, so `n_matched`
+itself carries no rounding ambiguity here). The all-10-menu aggregation was
+then recomputed by this same method as a validation step before trusting
+the excl-dinner figures: it reproduced the harness's own Gates table to
+within 0.0001 on `ingredient_f1_macro` and matched exactly on the other
+three. Rounding bound stated once, in the report itself, beneath both
+tables: at most a few parts in the last printed digit, immaterial next to
+gate misses of double-digit percentage points.
+
+Consistency gate recorded NOT MEASURED with its reason (no `--repeat` run
+performed, per the card's explicit single-run instruction): stated plainly
+as no number existing to report, not as a rounding of a small number.
+
+No prompt iteration was performed. No disposition recommendation was made
+for km-sushi-dinner. Numbers only, per the card.
+
+### Manifest (files touched, this commit)
+
+- `evals/reports/2026-08-06-p1-sb2-diag-masa.md`: written by the harness
+  (Step 3), unmodified after.
+- `evals/reports/2026-08-06-p1-sc-all.md`: written by the harness (Step 4),
+  then the supplementary aggregation section appended by hand under a
+  clearly marked heading; everything above that heading is the harness's
+  own unaltered output.
+- `docs/BUILDLOG.md`: this entry.
+- `evals/usage/2026-08-06-p1-sb2-diag-masa.jsonl` and
+  `evals/usage/2026-08-06-p1-sc-all.jsonl`: written incrementally by the
+  hardened harness during both runs; gitignored per commit 1, not part of
+  this commit, reconciled into this entry's prose instead (both reconcile
+  exactly against their respective reports' totals, per above).
+- No `golden.json` anywhere touched. Confirmed by `git status --porcelain`
+  (only the two report files untracked before this commit) and by
+  `git diff --name-only e8f96e1 HEAD -- 'evals/menus/*/golden.json'`
+  returning nothing for any commit in this session's range; the last commit
+  to touch any golden predates this session (b6f36cf).
+- Not touched: `shared/prompts/*`, `shared/aliases.json`, `shared/schema/*`,
+  `evals/menus/README.md`, `evals/accepted_vocabulary.json`,
+  `ROMAJI_LEXICON`, `evals/run_evals.py` (unchanged since commit 1's
+  `cd431fd`), `src/*`, `docs/SPEC.md`, `PLAN.yaml`, `.dev.vars`, `.envrc`,
+  wrangler config.
+
+### Patterns established
+
+- A tool-permission denial at the classifier layer is not the same thing as
+  Tom declining a spend gate, and should be reported and escalated to Tom
+  rather than routed around through another tool (a config-edit skill, a
+  different shell invocation). This held even when the alternate route
+  looked benign (adding a permission rule, not spending money): the
+  restriction itself, not just its immediate effect, is what to respect.
+- Cross-checking a hand-built aggregation against the harness's own
+  pre-computed all-menus figures, before trusting the same method's output
+  on a subset the harness never directly reports, is a cheap way to bound
+  the rounding error without a second paid run. The bound is then stated
+  once in the report, not asserted without a check behind it.
+- Two independent measurements of the same signal (masa's index tokens,
+  once in the Step 3 diagnostic, once inside Step 4's full run) is stronger
+  evidence than one; the second run wasn't spent for this purpose alone,
+  but recording it here upgrades the Step 3 verdict from a single
+  measurement to a repeated one.
+
+### Done-when, walked item by item
+
+1. All `max_tokens` values printed old and new: table in the part 1 entry
+   and in `evals/run_evals.py`'s own comment above the constants. Done.
+2. Crash-path self-test proven with a synthetic fixture: part 1 entry,
+   `--check` output, `_crash_path_self_test()`. Done. (Not exercised for
+   real this session, since neither run crashed, by design: the fix worked.)
+3. `--check` identical before and after hardening, totals shown: part 1
+   entry, one-line diff, identical totals. Done.
+4. Usage JSONL exists and reconciles with report totals: both runs this
+   session, shown above. Done.
+5. Step 3 outcome recorded with the discriminator read, cause tagged
+   ESTABLISHED: above. Done.
+6. Baseline report with both aggregations, wrap annotation, rounding bound,
+   consistency NOT MEASURED: `evals/reports/2026-08-06-p1-sc-all.md`,
+   supplementary section. Done.
+7. Zero goldens modified, proven by git diff: above. Done.
+8. Two commits, neither pushed: `cd431fd` (part 1) and this commit (part 2).
+   Confirmed by `git log --oneline origin/main..HEAD` and `git status`
+   below.
+
+### Single next action
+
+None outstanding on this card. `evals/run_evals.py` now has raw-response
+capture, incremental usage accounting, and per-menu progress, the three
+gaps named in the P1-SC entry; the `--all` gate failures recorded in the
+baseline report are numbers only, not a disposition, and were explicitly
+out of scope for this card. A future card would decide what, if anything,
+to do about the FAIL rows (prompt iteration, golden review, or a scoped
+investigation of km-sushi-dinner specifically), starting from this session's
+baseline report as the reference point.
