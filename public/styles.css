@@ -550,3 +550,61 @@ body {
    the filter sheet still slides from the bottom rather than becoming a
    side panel, per SPEC.md's explicit instruction that this holds at every
    size, not just mobile. */
+
+/* Flagged-item correction sheet (task #16) */
+
+.badge-edited {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.fix-ingredients-trigger {
+  margin-top: 0.6rem;
+  width: 100%;
+}
+
+.ingredient-list.editable {
+  gap: 0.5rem;
+}
+
+.editable-ingredient {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.3rem 0.15rem 0.7rem;
+}
+
+.editable-ingredient::after {
+  content: none; /* override the comma-join styling used for read-only lists */
+}
+
+.ingredient-remove {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.tier-input {
+  margin: 0.5rem 0;
+}
+
+.autocomplete-suggestions {
+  margin-bottom: 0.5rem;
+}
+
+.free-text-row .secondary-action {
+  width: 100%;
+}
+
+.retry-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-height: 1.2em;
+}

@@ -274,11 +274,27 @@ export class JobController {
     this.state = STATES.IDLE;
     this.job = null;
     this.listeners = new Set();
+    // Deliberately NOT part of `job` (never touches saveJob/localStorage):
+    // base64 photo data is easily multi-MB per photo, and job state is
+    // persisted to localStorage on every single-state transition per
+    // SPEC.md. Storing images there would risk the browser's storage
+    // quota on every save, not just once. Living only as an in-memory
+    // instance field means a single-item retry is only possible for a job
+    // completed in the current page load, not one reopened later from
+    // ss:menu:* (recent menus); ui.js gates the "Retry this item" action
+    // on that distinction rather than pretending it always works.
+    this.photoImages = null;
   }
 
   subscribe(callback) {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
+  }
+
+  // Returns the ImageInput for a given photo index if this job's images are
+  // still in memory (same page load, not a reopened recent menu), or null.
+  getPhotoImage(photoIndex) {
+    return this.photoImages ? (this.photoImages[photoIndex] ?? null) : null;
   }
 
   _setState(state) {
@@ -311,6 +327,7 @@ export class JobController {
 
     this._setState(STATES.PREPROCESS);
     const images = await Promise.all(files.map((f) => preprocessPhoto(f)));
+    this.photoImages = images;
     const photoHashes = await Promise.all(images.map((img) => sha256Hex(img.data)));
     const jobHash = await computeJobHash(photoHashes);
 

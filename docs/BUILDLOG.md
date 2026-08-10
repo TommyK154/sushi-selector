@@ -3035,3 +3035,146 @@ unverified pending real site/secret keys. Actual visual/CSS correctness
 is unverified pending a real rendering engine (a future session could
 reach for a screenshot-capable tool if one becomes available, or Tom
 eyeballing a deployed preview).
+
+## Session 2026-08-10: flagged-item correction UI (fix-ingredients sheet)
+
+Base commit: 4243b3a
+
+### Scope
+
+Task #16, the flagged-item correction card #15 itself flagged as the next
+natural piece. Zero-spend. Per SPEC.md's RECONCILE handling: "Retry this
+item" (single-item details re-call) then a "Fix ingredients" bottom sheet
+with tier 1 menu-vocabulary chips, tier 2 autocomplete over that same
+vocabulary, tier 3 free text only when nothing matches. Edits run through
+the existing normalization/alias pipeline, swap the flagged marker for an
+edited marker, persist with the cached menu. The live retry call itself is
+explicitly out of scope for exercising end to end (needs a real API call
+and a real Turnstile solve), per the card's own acceptance criterion.
+
+### A deeper gap than it first looked: retry needs the original photo
+
+Tracing through what "wire the Retry button to the existing endpoint"
+actually requires: the completed job's `items` carry no reference back to
+the photo bytes that produced them. `app.js`'s `JobController.start()`
+holds `images` as a local variable, never stored on `this.job` (correctly:
+`job` is persisted to localStorage on every state transition, and base64
+photo data is easily multi-MB per photo, an easy way to blow the storage
+quota). Fixed by adding `this.photoImages` as a plain instance field,
+deliberately outside `job`, never touched by `saveJob`. Consequence, made
+explicit rather than hidden: a single-item retry only works for a job
+completed in the current page load; a menu reopened later from
+`ss:menu:*` (Recent) has no photo to retry with. `ui.js` tracks this via
+`state.canRetryItems` and hides the Retry button entirely when it's false,
+rather than showing a button that would always fail.
+
+### The correction sheet
+
+Tier 1 (menu vocabulary chips), tier 2 (autocomplete over the same
+vocabulary, live-filtered as you type), tier 3 (a "Add ... anyway" button
+that appears only when tier 2 finds zero matches, per SPEC.md's explicit
+ordering). Edits accumulate in a working copy; Cancel discards it, Save
+runs the final list through `normalizeIngredients` (the same aliases.js
+pipeline every extracted ingredient goes through) and flips the item from
+`flagged` to `edited`, persisting via the existing `saveMenu`. "Retry this
+item," when available, calls the real `/api/session` then
+`/api/extract/details` endpoints with the item's actual photo and item
+number; on failure (expected in this environment: no Turnstile widget is
+mounted on the menu screen to solve a fresh challenge with, so the session
+call fails `turnstile_failed` exactly as it should against a real
+deployment) it renders an honest inline error rather than pretending to
+succeed, and on success it applies the returned ingredients/wrap/is_raw
+through the same correction pipeline as a manual edit.
+
+### Verification
+
+jsdom again (no browser automation tool in this environment, same as
+#15), the real shipped files, against a live `wrangler dev` boot. 25 new
+assertions covering: the correction trigger appearing only on flagged
+items and disappearing once corrected; tier 1/2/3 each independently
+(chip add, autocomplete-then-add, free-text-only-when-no-match); the
+remove button; Save closing the sheet, flipping the badge, and updating
+the rendered ingredients; and, deliberately, that the persisted
+`localStorage` copy carries the *normalized* ingredient ("shrimp"), not
+the raw typed one ("Ebi") — proving Save actually ran the alias pipeline
+rather than storing what was typed verbatim.
+
+**Caught a second real bug in the process**: `state.aliasTable` was only
+ever loaded in `onJobReady` (the live-parse completion path). Opening a
+menu from Recent skipped it entirely, so the first correction attempt on
+a reopened menu crashed on a null alias table inside `normalizeIngredients`
+(`Cannot read properties of null`). Fixed with the same load-once guard
+already used in `onJobReady`, added to the recent-menu open handler too.
+Re-ran both this session's suite and #15's full 27-assertion suite
+afterward (the recent-menu handler became async, which needed a polling
+wait instead of a fixed tick in both test harnesses, a harness-only fix,
+not an app change) to confirm nothing regressed. 52 total assertions pass
+across both suites.
+
+### Manifest (files touched, this commit)
+
+- `public/app.js`: `JobController.photoImages` (in-memory only) and
+  `getPhotoImage()`.
+- `public/ui.js`: the correction sheet, `retryItem`/`applyCorrection`, the
+  fix-ingredients trigger on flagged cards, the `edited` badge, and the
+  recent-menu-open alias-table-loading fix.
+- `public/styles.css`: correction-sheet-specific styles (editable
+  ingredient chips, tier-2 autocomplete list, tier-3 free-text row, retry
+  status line, edited badge).
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `shared/*`, `evals/*`, `src/*` (no worker change needed,
+  the retry call reuses `/api/session` and `/api/extract/details`
+  unmodified from earlier tasks), `public/filters.js`, `public/aliases.js`
+  (both reused as-is, `buildIngredientVocabulary`, `filterChipVocabulary`,
+  and `normalizeIngredients` already did everything this card needed).
+- Deliberately not committed: `.claude/statusline.sh` and
+  `.claude/settings.local.json`'s new `statusLine` entry, added this
+  session at Tom's direct authorization but personal session tooling, not
+  a project deliverable; `settings.local.json` is already gitignored.
+
+### Patterns established
+
+- "Wire the button to the existing endpoint" can hide a real data-
+  availability question underneath it (does the data the endpoint needs
+  still exist by the time the button is pressed?), not just a plumbing
+  question. Worth tracing the full data lifecycle, not just the network
+  call, before assuming a UI wire-up is purely mechanical.
+- The `state.aliasTable` gap is the third occurrence this repo has now
+  hit of "a resource loaded on one entry path silently missing on
+  another" (aliases.json's reachability, the Turnstile site key, now
+  this). Worth treating as a standing pattern going forward: whenever a
+  screen/flow gains a second way to reach it, check what the first path's
+  setup steps assumed were already done.
+- Async-ifying a click handler for a legitimate reason (loading data
+  before proceeding) is easy to do without noticing every test that
+  exercises that handler now needs to wait properly instead of assuming
+  synchronous completion; caught immediately by re-running the existing
+  suite, not by inspection.
+
+### Done-when, walked item by item
+
+1. Bottom sheet renders and is drivable, tier 1/2/3 all function: done,
+   verified via jsdom, not just code review, 16 of the 25 new assertions
+   cover this directly.
+2. Edits apply through the existing normalization/alias pipeline and
+   update the marker from flagged to edited: done, verified including the
+   specific alias-resolution proof (Ebi to shrimp) and persistence to
+   localStorage.
+3. Zero spend: done, no Anthropic calls made. The one real network call
+   this session made (`/api/session` reachability, not exercised as part
+   of the assertion suite, only reasoned about) is free (Cloudflare
+   Turnstile siteverify has no cost) and was not actually invoked during
+   verification, only wired correctly.
+4. Live single-item retry call: explicitly not exercised, per the card's
+   own acceptance criterion. Noted here as the follow-up needing a real
+   API call and a real Turnstile solve, same class of gap as #11's and
+   #15's Turnstile-widget limitations.
+
+### Single next action
+
+Live-verify the retry call end to end once real Turnstile site/secret
+keys exist (would also need a widget mounted somewhere reachable from the
+menu screen, not just the Home screen capture flow, since retry can
+happen well after the original session token has expired). Visual/CSS
+correctness for the new sheet elements remains unverified for the same
+reason as #15's: no rendering engine available this session.

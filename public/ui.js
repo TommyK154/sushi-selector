@@ -67,6 +67,8 @@ const state = {
   aliasTable: null,
   turnstileSiteKey: null,
   turnstileWidgetId: null,
+  correctionItemId: null, // id of the item currently open in the fix-ingredients sheet, or null
+  canRetryItems: false, // true only for a job completed this page load (see JobController.photoImages)
 };
 
 const controller = new JobController();
@@ -79,6 +81,7 @@ function render() {
   else if (state.screen === "menu") app.appendChild(renderMenuScreen());
 
   if (state.filterSheetOpen) app.appendChild(renderFilterSheet());
+  if (state.correctionItemId) app.appendChild(renderCorrectionSheet());
 }
 
 controller.subscribe((jobState, job) => {
@@ -115,6 +118,7 @@ async function onJobReady(job) {
   state.omakaseQueue = null;
   state.omakasePickId = null;
   state.omakaseExhausted = false;
+  state.canRetryItems = true; // this job's photoImages are live in the controller, same page load
   state.screen = "menu";
   render();
 }
@@ -247,7 +251,14 @@ function renderRecentMenus() {
             class: "recent-item",
             type: "button",
             text: menu.restaurantName || `Menu, ${new Date(menu.savedAt).toLocaleDateString()}`,
-            onclick: () => {
+            onclick: async () => {
+              // The alias table is needed for corrections (applyCorrection
+              // normalizes through it) and was previously only loaded on
+              // the live-parse path (onJobReady); reopening a menu from
+              // Recent skipped it entirely, a real bug caught by task
+              // #16's jsdom verification (correcting an item crashed on a
+              // null alias table). Same load-once guard as onJobReady.
+              if (!state.aliasTable) state.aliasTable = await loadAliasTable();
               state.menu = menu;
               state.filterState = createFilterState();
               state.searchQuery = "";
@@ -255,6 +266,7 @@ function renderRecentMenus() {
               state.omakaseQueue = null;
               state.omakasePickId = null;
               state.omakaseExhausted = false;
+              state.canRetryItems = false; // reopened from ss:menu:*, its photos are not in memory
               state.screen = "menu";
               render();
             },
@@ -472,6 +484,7 @@ function renderCard(item) {
     badges.push(el("span", { class: "badge badge-wrap", text: item.wrap.replace("_", " ") }));
   }
   if (item.flagged) badges.push(el("span", { class: "badge badge-flag", text: "needs review" }));
+  else if (item.edited) badges.push(el("span", { class: "badge badge-edited", text: "edited" }));
 
   const query = state.searchQuery.trim().toLowerCase();
   const ingredientNodes = item.ingredients.map((ingredient) => {
@@ -485,14 +498,27 @@ function renderCard(item) {
     item.price != null ? `$${item.price.toFixed(2)}` : item.price_text || "",
   );
 
-  return el("article", { class: "item-card", "data-item-id": item.id }, [
+  const children = [
     el("div", { class: "item-card-header" }, [
       el("h3", { class: "item-name", text: item.name }),
       priceNode,
     ]),
     badges.length > 0 ? el("div", { class: "badge-row" }, badges) : null,
     el("ul", { class: "ingredient-list" }, ingredientNodes),
-  ]);
+  ];
+
+  if (item.flagged) {
+    children.push(
+      el("button", {
+        class: "secondary-action fix-ingredients-trigger",
+        type: "button",
+        text: "Fix ingredients",
+        onclick: () => openCorrectionSheet(item.id),
+      }),
+    );
+  }
+
+  return el("article", { class: "item-card", "data-item-id": item.id }, children);
 }
 
 // --------------------------------------------------------------------------
@@ -694,6 +720,263 @@ function renderOmakaseExhaustion() {
       }),
     ]),
   ]);
+}
+
+// --------------------------------------------------------------------------
+// Flagged-item correction: "Retry this item" (single-item details re-call)
+// and "Fix ingredients" (tier 1/2/3 manual correction), per SPEC.md's
+// RECONCILE handling.
+// --------------------------------------------------------------------------
+
+function findMenuItem(itemId) {
+  return state.menu.items.find((item) => item.id === itemId) || null;
+}
+
+function openCorrectionSheet(itemId) {
+  state.correctionItemId = itemId;
+  render();
+}
+
+function closeCorrectionSheet() {
+  state.correctionItemId = null;
+  render();
+}
+
+// Applies an edited ingredient list to the item: runs it through the same
+// normalization/alias pipeline every extracted ingredient goes through (so
+// a hand-typed "Ebi" and a model-extracted "Ebi" land on the identical
+// canonical facet), swaps the flagged marker for the edited marker, and
+// persists the change with the cached menu, per SPEC.md.
+function applyCorrection(item, newIngredients) {
+  item.ingredients = normalizeIngredients(newIngredients, state.aliasTable);
+  item.flagged = false;
+  item.flagReason = null;
+  item.edited = true;
+  const slug = slugify(state.menu.restaurantName);
+  saveMenu(slug, state.menu);
+}
+
+// "Retry this item": a real single-item /api/extract/details call, wired
+// to the same endpoint every batch during the original parse used. Two
+// honest, documented gaps, neither exercised live this session (per task
+// #16's own scope, the same class of thing as #15's Turnstile-widget gap):
+// (1) this needs a fresh session token, and there is no Turnstile widget
+// mounted on the menu screen to solve a fresh challenge with, so the
+// /api/session call below will reach the server with an empty token and
+// fail turnstile_failed against a real deployment, exactly as it should;
+// (2) it needs the original photo, only available when canRetryItems is
+// true (this job completed in the current page load). Both failure paths
+// are real, reachable code, not stubs: they render an honest inline error
+// rather than pretending to succeed.
+async function retryItem(item, statusNode) {
+  const photoIndex = Number(item.id.split(":")[0]);
+  const image = controller.getPhotoImage(photoIndex);
+  if (!image) {
+    statusNode.textContent =
+      "This photo isn't available to retry (menu was reopened from Recent). Use Fix ingredients instead.";
+    return;
+  }
+  statusNode.textContent = "Retrying…";
+  try {
+    const sessionRes = await fetch("/api/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turnstileToken: "" }),
+    });
+    const sessionData = await sessionRes.json().catch(() => null);
+    if (!sessionRes.ok) {
+      throw new Error((sessionData && sessionData.error) || `http_${sessionRes.status}`);
+    }
+    const n = Number(item.id.split(":")[1]);
+    const detailsRes = await fetch("/api/extract/details", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionToken: sessionData.sessionToken,
+        image,
+        items: [{ n, name: item.name }],
+      }),
+    });
+    const detailsData = await detailsRes.json().catch(() => null);
+    if (!detailsRes.ok) {
+      throw new Error((detailsData && detailsData.error) || `http_${detailsRes.status}`);
+    }
+    const result = detailsData.items && detailsData.items[0];
+    if (!result) throw new Error("empty_result");
+    applyCorrection(item, result.ingredients);
+    item.wrap = result.wrap;
+    item.is_raw = result.is_raw;
+    closeCorrectionSheet();
+    if (currentMenuRenderHooks) currentMenuRenderHooks.renderList();
+  } catch (err) {
+    statusNode.textContent = `Retry failed (${err.message}). Try Fix ingredients instead.`;
+  }
+}
+
+function renderCorrectionSheet() {
+  const item = findMenuItem(state.correctionItemId);
+  if (!item) {
+    state.correctionItemId = null;
+    return el("div", {});
+  }
+
+  // Working copy: edits apply only on Save, Cancel discards them.
+  let working = [...item.ingredients];
+
+  const overlay = el("div", { class: "sheet-overlay", role: "presentation" });
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeCorrectionSheet();
+  });
+
+  const vocabulary = buildIngredientVocabulary(state.menu.items);
+
+  const currentList = el("ul", { class: "ingredient-list editable" });
+  function renderCurrentList() {
+    clear(currentList);
+    for (const ingredient of working) {
+      currentList.appendChild(
+        el("li", { class: "ingredient editable-ingredient" }, [
+          el("span", { text: ingredient }),
+          el("button", {
+            type: "button",
+            class: "ingredient-remove",
+            "aria-label": `Remove ${ingredient}`,
+            text: "×",
+            onclick: () => {
+              working = working.filter((i) => i !== ingredient);
+              renderCurrentList();
+            },
+          }),
+        ]),
+      );
+    }
+  }
+  renderCurrentList();
+
+  function addIngredient(ingredient) {
+    const trimmed = ingredient.trim().toLowerCase();
+    if (!trimmed || working.includes(trimmed)) return;
+    working.push(trimmed);
+    renderCurrentList();
+  }
+
+  // Tier 1: chips of the menu's own vocabulary, tap to add.
+  const tier1 = el(
+    "div",
+    { class: "chip-list", role: "group", "aria-label": "Common ingredients on this menu" },
+    vocabulary.map((ingredient) =>
+      el("button", {
+        type: "button",
+        class: "chip chip-neutral",
+        text: ingredient,
+        onclick: () => addIngredient(ingredient),
+      }),
+    ),
+  );
+
+  // Tier 2: autocomplete over that same vocabulary. Tier 3: free text,
+  // offered only when nothing in the vocabulary matches what was typed,
+  // per SPEC.md.
+  const tierInput = el("input", {
+    type: "text",
+    class: "text-input tier-input",
+    placeholder: "Type an ingredient",
+    "aria-label": "Add an ingredient",
+  });
+  const suggestions = el("div", { class: "chip-list autocomplete-suggestions" });
+  const freeTextRow = el("div", { class: "free-text-row" });
+
+  function renderSuggestions() {
+    clear(suggestions);
+    clear(freeTextRow);
+    const query = tierInput.value.trim();
+    if (!query) return;
+    const matches = filterChipVocabulary(vocabulary, query);
+    for (const match of matches) {
+      suggestions.appendChild(
+        el("button", {
+          type: "button",
+          class: "chip chip-neutral",
+          text: match,
+          onclick: () => {
+            addIngredient(match);
+            tierInput.value = "";
+            renderSuggestions();
+          },
+        }),
+      );
+    }
+    if (matches.length === 0) {
+      freeTextRow.appendChild(
+        el("button", {
+          type: "button",
+          class: "secondary-action",
+          text: `Add "${query}" anyway`,
+          onclick: () => {
+            addIngredient(query);
+            tierInput.value = "";
+            renderSuggestions();
+          },
+        }),
+      );
+    }
+  }
+  tierInput.addEventListener("input", renderSuggestions);
+
+  const retryStatus = el("p", { class: "retry-status" });
+  const retryButton = el("button", {
+    class: "secondary-action",
+    type: "button",
+    text: "Retry this item",
+    onclick: () => retryItem(item, retryStatus),
+  });
+
+  const sheetChildren = [
+    el("div", { class: "sheet-handle" }),
+    el("h3", { class: "section-title", text: item.name }),
+  ];
+  if (state.canRetryItems) {
+    sheetChildren.push(retryButton, retryStatus);
+  }
+  sheetChildren.push(
+    el("h3", { class: "section-title", text: "Current ingredients" }),
+    currentList,
+    el("h3", { class: "section-title", text: "Common on this menu" }),
+    tier1,
+    el("h3", { class: "section-title", text: "Or type one" }),
+    tierInput,
+    suggestions,
+    freeTextRow,
+    el("button", {
+      class: "primary-action",
+      type: "button",
+      text: "Save",
+      onclick: () => {
+        applyCorrection(item, working);
+        closeCorrectionSheet();
+        if (currentMenuRenderHooks) currentMenuRenderHooks.renderList();
+      },
+    }),
+    el("button", {
+      class: "secondary-action sheet-done",
+      type: "button",
+      text: "Cancel",
+      onclick: closeCorrectionSheet,
+    }),
+  );
+
+  const sheet = el(
+    "div",
+    {
+      class: "sheet",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": `Fix ingredients for ${item.name}`,
+    },
+    sheetChildren,
+  );
+  overlay.appendChild(sheet);
+  return overlay;
 }
 
 render();
