@@ -3436,3 +3436,122 @@ None outstanding on this card. A future consistency-measurement task
 (task #12's own successor, if one gets scheduled) can now use `--repeat N
 --menu <slug>` or `--repeat N --all` directly instead of N manual
 invocations and hand aggregation.
+
+## Session 2026-08-10: consistency measurement on noodles-kitchen (task #20)
+
+Base commit: abb8965
+
+### Scope
+
+Task #20, diagnostic follow-up to #10's blocker and #12's methodology,
+now that #17 fixed `--repeat`'s no-op bug. Spend cap $0.50 (Tom-approved
+2026-08-10, same class as #12's cap). Question: was task #10's round-3
+finding (unedited prompt scoring 0.267 then 0.333 recall on two separate
+single runs of km-sushi-noodles-kitchen) general single-run noise
+matching #12's pattern (item-level metrics bit-identical, only
+ingredient F1 wobbling), or specific to this menu's known combo/choice-
+set complexity? #12 never tested km-sushi-noodles-kitchen itself, so it
+left this open. No prompt edit in scope, that stays #10's.
+
+### Verified the fix before spending: --repeat 3 now loops for real
+
+Confirmed by reading `evals/run_evals.py` (the `repeat = max(1, args.repeat)`
+loop at line 2012 and its 3 calls to `score_menu` per menu) rather than
+trusting #17's report alone.
+
+### Command run
+
+```
+uv run evals/run_evals.py --menu km-sushi-noodles-kitchen --repeat 3
+```
+
+One invocation, the harness's own loop performed all 3 runs and
+aggregated the consistency row; no hand-aggregation needed this time.
+
+### Results
+
+| Run | Items (pred) | Ing F1 (macro) |
+|---|---|---|
+| r1 | 28 | 0.667 |
+| r2 | 23 | 0.500 |
+| r3 | 37 | 0.200 |
+
+Gold item count: 15.
+
+Item counts are **NOT identical** across the 3 runs (28, 23, 37), unlike
+every menu #12 tested. Ingredient F1 macro spread: 0.667 - 0.200 =
+**0.4667**, over 15x the 0.03 consistency gate and roughly 9-40x the
+0.049/0.011 spreads #12 measured on nigiri/sashimi. The report's own
+aggregate row (computed from run 1, the harness's convention for the
+main Gates table) shows recall 0.200, precision 0.107, price accuracy
+0.333, all far under the 0.97 gate, consistent with task #10's round-3
+single-run readings landing in a similarly bad range (0.267/0.333
+recall) rather than being an aberration.
+
+Cost: $0.0820 of the $0.50 cap.
+
+### Reading, feeding back into task #10's blocker
+
+This is a different picture from #12's: on nigiri and sashimi, item
+count/recall/precision/price were bit-identical across repeats and only
+ingredient F1 wobbled by a small, gate-relevant but bounded amount. On
+km-sushi-noodles-kitchen, item count itself is unstable run to run (28
+vs 23 vs 37 against a gold count of 15, the harness is both over- and
+under-generating items depending on the run) and every metric including
+ingredient F1 swings by an order of magnitude more than on the other two
+menus. That answers task #20's question directly: the 0.267/0.333 recall
+swing task #10 saw was not general single-run noise of the kind #12
+found elsewhere in the golden set. It is specific to km-sushi-noodles-
+kitchen, consistent with #10's own hypothesis that this menu's combo/
+choice-set complexity (soups, katsu, doodon, and ramen variants sharing
+overlapping names and a dense menu-photo layout, per the diffs below)
+degrades extraction stability well beyond this harness's normal noise
+floor.
+
+Practical implication for #10: a single run on this menu cannot be
+trusted as a baseline or as evidence a prompt edit helped or hurt, the
+swing between good and bad runs is large enough to swallow any
+plausible edit effect, exactly what #10 round 3 already suspected but
+without a documented multi-run comparison. Any future work on this menu
+under #10 should budget for `--repeat 3` (or more) on both control and
+edited-prompt runs, not single-run comparisons.
+
+### Manifest (files touched, this commit)
+
+- `evals/reports/2026-08-10-p1-repeat-noodles-kitchen.md`: written by the
+  harness (as `report.md`, no `--timestamp` flag used), renamed and its
+  title line updated to match this repo's report-naming convention;
+  table data and diffs untouched.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `evals/run_evals.py`, `shared/*`, `src/*`, `public/*`,
+  `evals/menus/*/golden.json` (no golden edited, no prompt edited, per
+  this card's explicit scope limit).
+
+### Patterns established
+
+- `--repeat N --menu <slug>` (post-#17) is now the standard way to check
+  whether a single-run reading is trustworthy before treating it as
+  evidence in a prompt-edit task; #10's next round should use it instead
+  of single runs.
+- Noise floor is not just menu-specific in degree (#12's finding) but can
+  be specific in *kind*: nigiri/sashimi's instability was confined to one
+  metric (ingredient F1) while item-level metrics stayed rock solid;
+  noodles-kitchen's instability shows up in item count itself, a more
+  fundamental extraction failure than a metric-level wobble.
+
+### Done-when, walked item by item
+
+1. A single `--repeat 3` run on km-sushi-noodles-kitchen lands within the
+   $0.50 cap: done, $0.0820 spent.
+2. Item-count consistency and ingredient F1 spread reported per-run:
+   done, table above, taken directly from the harness's own Consistency
+   section (no hand-aggregation needed, unlike #12).
+3. Findings feed back into task #10: done, the swing is menu-specific and
+   real, not general single-run noise, per the reading above.
+
+### Single next action
+
+Task #10 stays blocked pending Tom/oversight's read of this data. If
+reopened, its next round should use `--repeat 3` on both the control and
+any edited-prompt run on km-sushi-noodles-kitchen specifically, given how
+far this menu's noise floor sits from the rest of the golden set.
