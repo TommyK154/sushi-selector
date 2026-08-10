@@ -2713,3 +2713,160 @@ None outstanding on this card; task #10 is blocked pending task #12 or
 Tom's direction. A future round should not retry km-sushi-noodles-kitchen's
 combo fix as a single n=1 verification again without either a `--repeat`
 run or explicit acceptance of the noise floor found here.
+
+## Session 2026-08-10: P1-S4, worker spine
+
+Base commit: 1a891a1
+
+### Scope
+
+Task #11 from the agent-pm board. Zero-spend. Covers T-1.1 preprocess.js,
+T-1.6 session.ts, T-1.7 ratelimit.ts, T-1.8 worker router, T-1.9 app.js
+state machine.
+
+### Pre-existing state, checked before writing anything
+
+`src/extract.ts` (Anthropic request construction) and `src/worker.ts` (a
+Phase 0 skeleton: health check, CORS, route table, `/api/*` other than
+`/health` explicitly 404ing) already existed. `src/session.ts`, `src/
+ratelimit.ts`, `public/preprocess.js` did not exist. `public/app.js`
+existed as a 16-line stub, not the state machine.
+
+### T-1.6, T-1.7: session.ts, ratelimit.ts
+
+Verified live docs before writing (CLAUDE.md's requirement, training data
+may be stale): Turnstile siteverify endpoint, request fields including
+`idempotency_key`, response fields; the native `RateLimit` binding's
+`limit({key}): Promise<{success}>` signature; period constrained to 10 or
+60 seconds (already satisfied by the existing wrangler.jsonc config).
+
+Session token minted and verified exactly per SPEC.md's wire format:
+`base64url(payload) + "." + base64url(hmacSHA256(payload, secret))`, HMAC
+computed over the raw serialized payload bytes, not the base64url-encoded
+string (a deliberate departure from JWT convention already present in the
+spec, implemented as specified rather than substituted for the more common
+pattern). Signature check uses `crypto.subtle.verify` (constant-time), never
+a string or byte comparison, per SPEC.md's security controls.
+
+### T-1.8: worker router
+
+Wired `/api/session`, `/api/extract/index`, `/api/extract/details`, `/api/
+extract/url` using session.ts, ratelimit.ts, and the existing extract.ts
+provider. Body size capped at 1.5MB (content-length check plus an explicit
+byte-length check for clients that omit or lie about the header), matching
+SPEC.md. One structured JSON log line per Anthropic call (endpoint, model,
+usage, latency, outcome), per SPEC.md's observability requirement.
+
+Found and fixed a real, pre-existing bug in wrangler.jsonc while wiring
+this: the `shared/prompts/*.md` Text-module rule never actually worked.
+`base_dir` defaults to the directory containing `main` (`src/`), not the
+project root, so the glob silently matched nothing. Confirmed empirically,
+not just from docs: even after setting `base_dir` to the project root, the
+narrow glob still failed against a live `wrangler dev` boot; only the
+recursive `**/*.md` form worked. Neither problem had surfaced before this
+session because nothing imported `extract.ts` (whose `.md` imports trigger
+the rule) through the worker until this router wiring.
+
+### T-1.1: preprocess.js
+
+`createImageBitmap(file, { imageOrientation: 'from-image' })` for EXIF
+rotation, with a canvas-based fallback for browsers where that option is
+unsupported. Downscale to a 1568px longest edge, JPEG re-encode at 0.8
+quality, stepping down to 0.7 then 0.6 if the result exceeds 1.2MB, base64
+encode. Matches SPEC.md's five-step sequence exactly.
+
+### T-1.9: app.js state machine
+
+States IDLE, PREPROCESS, INDEX, DETAILS, RECONCILE, READY, ERROR per
+SPEC.md. Multi-photo merge with global ids (`photoIndex:n`), photo-order
+merge, dedupe on fuzzy name match plus compatible price (equal numeric, or
+at least one side null), keeping the record with more ingredients and
+unioning notes on a match. Fuzzy matching is a Levenshtein-ratio
+approximation of the harness's `token_sort_ratio`, explicitly documented in
+a comment as not byte-identical to Python's fuzzywuzzy/rapidfuzz
+(different algorithm, same idea: sort tokens, measure similarity), since no
+bundler exists to pull in a matching library and the client only needs to
+catch overlapping-photo duplicates, not reproduce the harness's exact
+score. DETAILS batch 1 fires alone to warm the prompt cache, remaining
+batches fan out at concurrency 3, batches of 8. One retry for items missing
+a details result after reconciliation, tracked per photo to stay idempotent
+across a resumed job. Full job state persists to `localStorage` under
+`ss:job:<jobHash>` after every transition; a job younger than 30 minutes
+resumes from its last completed step. `restaurant_name` merge takes the
+first non-null value in photo order.
+
+Caught and fixed one bug before it shipped: `perPhotoRetried` was
+originally typed as `Set` per photo, which does not survive the
+`JSON.stringify`/`parse` round-trip every job save goes through via
+localStorage; a resumed job would have silently lost its retry-tracking
+state. Changed to a plain array with `includes`/`push` before this was ever
+exercised at runtime, caught by re-reading the code, not by a failing test
+(no test harness exists for this frontend code yet).
+
+### Verification
+
+`tsc --noEmit`: clean throughout. `node --input-type=module --check` on
+both new frontend files: clean. Live `wrangler dev` boot (multiple times,
+across the base_dir fix and the final integration check): `/api/health`
+200, `/api/session` 400 on missing Turnstile token, `/api/extract/index`
+401 without a valid session (auth gate confirmed working), `/api/menus/*`
+and unknown `/api/*` both 404, static assets including the two new JS files
+serving 200 with the correct content type. No secrets echoed anywhere
+(wrangler's own masking, confirmed in captured output). Zero Anthropic
+calls made; zero spend, matching the card's zero-spend tag.
+
+Not exercised end to end: Turnstile's success path (no real site/secret key
+pair available locally, only the `REPLACE_WITH_TURNSTILE_SITE_KEY`
+placeholder), and the full browser parse flow (no ui.js yet to drive it;
+that file is out of scope for this card, T-1.9 covers app.js only).
+
+### Manifest (files touched, this commit)
+
+- `src/session.ts`: new. Turnstile verification, HMAC session token
+  mint/verify.
+- `src/ratelimit.ts`: new. Thin wrapper over the two native RateLimit
+  bindings.
+- `src/worker.ts`: rewritten from the Phase 0 skeleton to the full Phase 1
+  router.
+- `public/preprocess.js`: new. Image normalization per SPEC.md.
+- `public/app.js`: rewritten from a 16-line stub to the full orchestration
+  state machine.
+- `wrangler.jsonc`: `base_dir` added, the Text-module rule's glob
+  broadened, both required to make the existing `.md`-as-text rule (added
+  2026-07-23) actually work.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched, out of scope for this card: `public/ui.js`, `public/
+  filters.js`, `public/aliases.js` (none exist yet, all named in SPEC.md's
+  repo layout but not in this card's T-numbers), `shared/*`, `evals/*`.
+
+### Patterns established
+
+- A module-resolution bug in bundler config can hide indefinitely behind an
+  unexercised import path; the fix surfaced only because this session
+  finally wired the file that exercises it, not because anything about the
+  config itself changed. Worth a standing habit: when wiring two
+  already-written pieces together for the first time, expect latent
+  integration bugs neither piece's own author could have caught alone.
+- A data type that will round-trip through `JSON.stringify`/`parse`
+  (anything persisted to localStorage, here) needs to be JSON-safe from the
+  start; `Set`, `Map`, and `Date` are the common traps. Worth checking this
+  explicitly for any new persisted field, not just at the point something
+  breaks on resume.
+
+### Done-when, walked item by item
+
+1. `wrangler dev` serves the app: done, verified live, multiple boots,
+   shown above.
+2. Session/ratelimit/router wired per SPEC.md endpoint contracts: done, all
+   four endpoints, verified against live docs before writing, smoke-tested.
+3. No spend incurred: done, zero Anthropic calls made this session, `.dev.
+   vars`'s ANTHROPIC_API_KEY never invoked outside task 10's separate,
+   already-authorized eval runs.
+
+### Single next action
+
+`public/ui.js`, `public/filters.js`, `public/aliases.js` remain unbuilt;
+app.js's state machine has no renderer yet to drive it in a real browser.
+Turnstile's success path is untested locally (needs a real site/secret key
+pair, likely a staging deploy or Tom supplying test keys). Both are natural
+next cards, neither is this one's scope.

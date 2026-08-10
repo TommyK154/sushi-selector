@@ -53,7 +53,20 @@
   // shared prompt files directly so shared/ stays the single source of
   // truth. Wrangler's bundler has no default loader for .md, so this rule
   // declares them as Text modules (verified against live Cloudflare docs).
+  //
+  // Amendment (2026-08-10, P1-S4): this rule never actually worked. Two
+  // problems, both confirmed empirically against a real `wrangler dev` boot,
+  // not assumed from docs alone: (1) base_dir defaults to the directory
+  // containing `main` (src/), not the project root, so a root-relative glob
+  // silently matched against src/shared/prompts/*.md (nothing there) instead
+  // of the real path; fixed by setting base_dir explicitly to the project
+  // root. (2) Even with base_dir corrected, the narrow glob
+  // "shared/prompts/*.md" still did not match (retested, still failed);
+  // only the recursive "**/*.md" form worked. Neither problem surfaced
+  // before now because src/extract.ts's .md imports were never reached by
+  // any build (worker.ts did not import extract.ts until this session).
+  "base_dir": ".",
   "rules": [
-    { "type": "Text", "globs": ["shared/prompts/*.md"], "fallthrough": true }
+    { "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
   ]
 }
