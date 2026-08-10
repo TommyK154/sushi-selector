@@ -3178,3 +3178,144 @@ menu screen, not just the Home screen capture flow, since retry can
 happen well after the original session token has expired). Visual/CSS
 correctness for the new sheet elements remains unverified for the same
 reason as #15's: no rendering engine available this session.
+
+## Session 2026-08-10: consistency measurement (task #12)
+
+Base commit: d793e5b
+
+### Scope
+
+Task #12, unblocked by Tom following task #10's round-3 finding of real
+single-run recall variance on km-sushi-noodles-kitchen. Spend cap $1
+(Tom-approved, confirmed to this session directly, same standing as task
+#10's cap). Measure item-count consistency and ingredient F1 spread
+across 3 repeat runs each on km-sushi-nigiri (densest) and
+km-sushi-sashimi (ugliest, per the card).
+
+### Found before spending anything: --repeat is a documented no-op
+
+`evals/run_evals.py` declares `--repeat` as a CLI argument (line 2025),
+names it in the usage banner ("`--all --repeat 3` # consistency runs",
+line 22), and the gate config carries `consistency_f1_spread_max: 0.03`
+(line 106) as if consistency measurement were implemented. It is not:
+`args.repeat` is never read anywhere in `cmd_run` or the rest of the file
+(confirmed by grep, zero usages). Running the task as literally specified
+would have silently executed as a single run per menu and spent money on
+data that could not answer the task's actual question.
+
+Not treated as a harness bug to fix under this card's budget: worked
+around instead, using the same hand-aggregation technique already
+precedented in this BUILDLOG (P1-SB2's supplementary aggregation, task
+#10's control run): 3 independent manual invocations of `--menu
+km-sushi-nigiri` and 3 of `--menu km-sushi-sashimi`, each its own
+timestamp, aggregated by hand. Same spend, same deliverable as what
+`--repeat 3` was supposed to produce. The no-op itself is flagged here as
+a real gap for a future harness-hardening card, not patched in place.
+
+### Results
+
+Commands run exactly, 6 total:
+```
+uv run evals/run_evals.py --menu km-sushi-nigiri --timestamp 2026-08-10-p1-repeat-nigiri-r{1,2,3}
+uv run evals/run_evals.py --menu km-sushi-sashimi --timestamp 2026-08-10-p1-repeat-sashimi-r{1,2,3}
+```
+
+**km-sushi-nigiri**, 3 runs:
+
+| Run | Items (pred/gold) | Recall | Precision | Ing F1 (macro) | Price acc | Wrap acc |
+|---|---|---|---|---|---|---|
+| r1 | 41/41 | 1.000 | 1.000 | 0.898 | 0.951 | 0.927 |
+| r2 | 41/41 | 1.000 | 1.000 | 0.873 | 0.951 | 0.927 |
+| r3 | 41/41 | 1.000 | 1.000 | 0.849 | 0.951 | 0.927 |
+
+Item count, recall, precision, price accuracy, and wrap accuracy are
+bit-identical across all 3 runs. Ingredient F1 macro spread: 0.898 -
+0.849 = **0.049, exceeds the 0.03 consistency gate.**
+
+**km-sushi-sashimi**, 3 runs:
+
+| Run | Items (pred/gold) | Recall | Precision | Ing F1 (macro) | Price acc | Wrap acc |
+|---|---|---|---|---|---|---|
+| r1 | 12/12 | 1.000 | 1.000 | 0.961 | 1.000 | 1.000 |
+| r2 | 12/12 | 1.000 | 1.000 | 0.950 | 1.000 | 1.000 |
+| r3 | 12/12 | 1.000 | 1.000 | 0.961 | 1.000 | 1.000 |
+
+Same pattern: item count, recall, precision, price, and wrap accuracy
+identical across all 3 runs. Ingredient F1 macro spread: 0.961 - 0.950 =
+**0.011, within the 0.03 consistency gate.**
+
+Total cost: nigiri $0.0500 + $0.0273 + $0.0276 = $0.1049; sashimi $0.0318
++ $0.0112 + $0.0117 = $0.0547. **$0.1596 of the $1 cap.**
+
+### Reading, feeding back into task #10's blocker
+
+Item count, recall, and precision are perfectly reproducible on both of
+these menus, three runs each, zero variance. That is a meaningfully
+different picture than task #10's noodles-kitchen finding (recall itself
+swinging 0.267 to 0.333): these two menus already score near-perfect on
+the baseline, and at that quality level the harness's extraction is
+completely stable on item-level metrics. The instability that does exist
+is narrower and metric-specific: ingredient F1 macro alone wobbles run to
+run, and by how much depends on the menu, not a fixed constant, 0.049 on
+the denser nigiri menu (over the 0.03 gate on its own, before any prompt
+edit is even in the picture) against 0.011 on sashimi (comfortably
+inside it).
+
+This does not resolve task #10's blocker on its own; it sharpens the
+question. A single-run verification is unsafe to trust specifically for
+ingredient F1 deltas on dense/repetitive menus (nigiri-shaped: many
+items sharing overlapping ingredient vocabulary), and that unsafety is
+not uniform across the menu set the way a single global noise-floor
+number would suggest. Item-count and recall/precision deltas, by
+contrast, look trustworthy on a single run for menus already this close
+to the gate. Task #10's own targets (precision on km-sushi-dinner and
+km-sushi-noodles-kitchen, price carry-down) are recall/precision/price
+questions, not ingredient F1 questions, so this specific consistency data
+does not directly cover the metric task #10 was actually trying to move,
+though the general lesson (verify against a menu-specific noise floor,
+not a single global assumption) still applies.
+
+### Manifest (files touched, this commit)
+
+- `evals/reports/2026-08-10-p1-repeat-nigiri-r{1,2,3}.md`: written by the
+  harness, unmodified after.
+- `evals/reports/2026-08-10-p1-repeat-sashimi-r{1,2,3}.md`: written by the
+  harness, unmodified after.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `evals/run_evals.py` (the `--repeat` no-op is flagged, not
+  fixed, per this card's scope), `shared/*`, `src/*`, `public/*`,
+  `evals/menus/*/golden.json`.
+
+### Patterns established
+
+- A flag can be fully wired into a script's help text, usage examples, and
+  even its own gate-threshold configuration while doing literally nothing
+  at runtime. `grep` for the argument's actual read sites, not just its
+  declaration, before trusting a documented flag exists to do what its
+  name and help string claim.
+- Consistency/noise-floor data is menu-specific and metric-specific, not
+  a single number that generalizes. Two menus with identical item-level
+  stability (0 variance) can still differ by 4x on ingredient-F1 spread.
+  A future consistency measurement should not assume one menu's noise
+  floor stands in for the whole golden set's.
+
+### Done-when, walked item by item
+
+1. Three repeat runs land for each of km-sushi-nigiri and km-sushi-
+   sashimi, within the $1 cap: done, $0.1596 spent, all 6 reports
+   committed.
+2. Report per-menu item-count consistency and ingredient F1 spread: done,
+   tables above, both computed by hand from the harness's own per-menu
+   breakdown rows (the same accepted method as P1-SB2's aggregation).
+3. Findings feed back into task #10's blocker: done, with the caveat
+   made explicit that this data covers ingredient F1 stability
+   specifically, not the recall/precision/price questions task #10's own
+   prompt-fix targets actually turn on.
+
+### Single next action
+
+Task #10 stays blocked; this data is evidence for Tom/oversight to weigh
+when deciding whether/how to reopen it, not an automatic unblock. The
+`--repeat` no-op is a real, separate finding worth its own harness-
+hardening card if consistency measurement is going to be run again
+without hand-aggregating every time.
