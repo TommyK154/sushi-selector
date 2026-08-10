@@ -875,6 +875,48 @@ class MenuScore:
     diffs: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ConsistencyRow:
+    """One menu's data across --repeat N independent runs. Item counts are
+    expected to be bit-identical (a deterministic pipeline reading the same
+    photo); ingredient_f1_macro is the metric task #12 found to actually
+    vary run to run, so its spread is what the consistency gate measures."""
+
+    slug: str
+    n_preds: list[int]
+    f1_values: list[float]
+
+    @property
+    def item_counts_identical(self) -> bool:
+        return len(set(self.n_preds)) <= 1
+
+    @property
+    def f1_spread(self) -> float:
+        return max(self.f1_values) - min(self.f1_values) if self.f1_values else 0.0
+
+
+def evaluate_consistency_gate(
+    rows: list["ConsistencyRow"],
+) -> Optional[tuple[str, float, float, bool]]:
+    """None when --repeat was not used (nothing measured, same as before this
+    fix). Otherwise a normal gate-row tuple, shaped identically to
+    evaluate_gates()'s rows, so it slots into the same Gates table instead of
+    needing separate rendering.
+
+    An item-count mismatch across repeats is folded into the same PASS/FAIL
+    as the F1-spread threshold, one gate, not two, matching task #12's own
+    card phrasing ("gate is identical item counts across 3 runs plus
+    ingredient F1 spread <= 0.03"): both conditions gate together.
+    """
+    if not rows:
+        return None
+    threshold = GATES["consistency_f1_spread_max"]
+    max_spread = max(row.f1_spread for row in rows)
+    all_identical = all(row.item_counts_identical for row in rows)
+    ok = all_identical and max_spread <= threshold
+    return ("consistency_f1_spread_max", max_spread, threshold, ok)
+
+
 def score_menu(slug: str, pred: list[dict], gold: list[dict], aliases: dict[str, str]) -> MenuScore:
     match = match_items(pred, gold)
     n_matched = len(match.pairs)
@@ -1520,6 +1562,7 @@ def write_report(
     call_usages: list[CallUsage],
     model: str,
     timestamp: str,
+    consistency_rows: Optional[list["ConsistencyRow"]] = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORTS_DIR / f"{timestamp}.md"
@@ -1535,6 +1578,17 @@ def write_report(
     for key, value, threshold, ok in gate_rows:
         lines.append(f"| {key} | {value:.4f} | >= {threshold:.2f} | {'PASS' if ok else 'FAIL'} |")
     lines.append("")
+    if consistency_rows:
+        lines.append(f"## Consistency (--repeat {len(consistency_rows[0].n_preds)})")
+        lines.append("")
+        lines.append("| Menu | Item counts per run | Identical | Ing F1 per run | Spread |")
+        lines.append("|---|---|---|---|---|")
+        for row in consistency_rows:
+            counts = ", ".join(str(n) for n in row.n_preds)
+            f1s = ", ".join(f"{v:.3f}" for v in row.f1_values)
+            identical = "yes" if row.item_counts_identical else "NO"
+            lines.append(f"| {row.slug} | {counts} | {identical} | {f1s} | {row.f1_spread:.4f} |")
+        lines.append("")
     lines.append("## Per-menu breakdown")
     lines.append("")
     lines.append("| Menu | Items (pred/gold) | Recall | Precision | Ing F1 (macro) | Price acc | Wrap acc |")
@@ -1951,16 +2005,43 @@ def cmd_run(args: argparse.Namespace) -> int:
     # persists under the same stem from the very first call.
     timestamp = args.timestamp or "report"
 
+    # repeat < 1 (a stray --repeat 0) is nonsensical for a "how many times do
+    # we run this" count; treat it the same as the unset default (1 run,
+    # today's behavior, nothing measured), rather than looping zero times
+    # and reporting on scores that were never computed.
+    repeat = max(1, args.repeat)
+
     all_call_usages: list[CallUsage] = []
     scores: list[MenuScore] = []
+    consistency_rows: list[ConsistencyRow] = []
     for i, menu in enumerate(menus, start=1):
-        print(f"[{i}/{len(menus)}] {menu.slug}: starting, {len(menu.photos)} photo(s)", flush=True)
-        pred, call_usages = run_pipeline_for_menu(menu, assets, model, args.batch, timestamp)
-        all_call_usages.extend(call_usages)
-        scores.append(score_menu(menu.slug, pred, menu.golden.get("items", []), assets.aliases))
+        repeat_note = f", {repeat} repeat run(s)" if repeat > 1 else ""
+        print(f"[{i}/{len(menus)}] {menu.slug}: starting, {len(menu.photos)} photo(s){repeat_note}", flush=True)
+
+        menu_calls = 0
+        repeat_scores: list[MenuScore] = []
+        for _ in range(repeat):
+            pred, call_usages = run_pipeline_for_menu(menu, assets, model, args.batch, timestamp)
+            all_call_usages.extend(call_usages)
+            menu_calls += len(call_usages)
+            repeat_scores.append(score_menu(menu.slug, pred, menu.golden.get("items", []), assets.aliases))
+
+        # The first repeat's score feeds the normal Gates table and per-menu
+        # breakdown, unchanged in shape from before this fix; every repeat's
+        # score feeds the consistency row when repeat > 1.
+        scores.append(repeat_scores[0])
+        if repeat > 1:
+            consistency_rows.append(
+                ConsistencyRow(
+                    slug=menu.slug,
+                    n_preds=[s.n_pred for s in repeat_scores],
+                    f1_values=[s.ingredient_f1_macro for s in repeat_scores],
+                )
+            )
+
         running_cost = estimate_cost(_sum_usage(all_call_usages))
         print(
-            f"[{i}/{len(menus)}] {menu.slug}: done, {len(call_usages)} call(s), "
+            f"[{i}/{len(menus)}] {menu.slug}: done, {menu_calls} call(s), "
             f"running cost ${running_cost:.4f}",
             flush=True,
         )
@@ -1968,7 +2049,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     total_usage = _sum_usage(all_call_usages)
     agg = aggregate(scores)
     gate_rows = evaluate_gates(agg)
-    path = write_report(scores, agg, gate_rows, total_usage, all_call_usages, model, timestamp)
+    consistency_gate = evaluate_consistency_gate(consistency_rows)
+    if consistency_gate:
+        gate_rows.append(consistency_gate)
+    path = write_report(
+        scores, agg, gate_rows, total_usage, all_call_usages, model, timestamp, consistency_rows
+    )
     print(f"report written: {path}")
     all_pass = all(ok for *_x, ok in gate_rows)
     print("GATES: " + ("PASS" if all_pass else "FAIL"))

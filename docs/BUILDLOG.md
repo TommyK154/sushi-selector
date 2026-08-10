@@ -3319,3 +3319,120 @@ when deciding whether/how to reopen it, not an automatic unblock. The
 `--repeat` no-op is a real, separate finding worth its own harness-
 hardening card if consistency measurement is going to be run again
 without hand-aggregating every time.
+
+## Session 2026-08-10: fix --repeat no-op (task #17)
+
+Base commit: 259735b
+
+### Scope
+
+Task #17, the harness-hardening card spun off dev-claude-code's own
+finding while executing task #12. Zero-spend: `--repeat N` should
+actually perform N independent runs per menu and aggregate item-count
+consistency plus ingredient F1 spread against the existing
+`consistency_f1_spread_max` gate, matching what the usage banner already
+claimed it did.
+
+### Implementation
+
+`ConsistencyRow` (slug, `n_preds` list, `f1_values` list across the N
+repeats, `item_counts_identical` and `f1_spread` as properties) and
+`evaluate_consistency_gate(rows)`, shaped identically to the existing
+`evaluate_gates()`'s row tuples so it slots into the same Gates table
+without a parallel rendering path. `evaluate_consistency_gate` returns
+`None` when no repeats happened (the unset default, `repeat=1`), so
+behavior for every existing caller (every prior eval run in this repo's
+history) is completely unchanged: the Gates table gets the same 4 rows it
+always has, no consistency row appears, exactly as before this fix.
+
+`cmd_run`'s per-menu loop now runs `max(1, args.repeat)` times per menu.
+The first repeat's score feeds the existing per-menu breakdown and the
+main aggregate/gates exactly as a single run always has; every repeat's
+score (all of them) builds the `ConsistencyRow` when `repeat > 1`. Item
+count mismatch across repeats and F1 spread over the 0.03 threshold both
+fail the single `consistency_f1_spread_max` gate row (matching the
+original card's own phrasing, "identical item counts... plus... spread",
+as one combined condition, not two separate gates). `write_report` gained
+an optional `consistency_rows` parameter and a new "## Consistency
+(--repeat N)" section, printed only when repeats actually happened.
+
+### Verification: zero spend, the real code, not a reimplementation
+
+`--check` first (unchanged, confirms the file still parses/imports
+cleanly; doesn't exercise `cmd_run` at all, a different code path).
+
+Then a dry structural check per this card's own acceptance criterion,
+importing the real `evals/run_evals.py` unmodified via
+`importlib.util.spec_from_file_location` (protected by its own `if
+__name__ == "__main__":` guard, safe to import without executing) and
+monkeypatching only `run_pipeline_for_menu`, the one function that
+actually calls the Anthropic API, out entirely:
+
+- 9 unit-level assertions directly against `ConsistencyRow`/
+  `evaluate_consistency_gate`: no rows returns `None`; a single row's
+  spread computes correctly (checked against both a synthetic 0.01 case
+  and task #12's own real nigiri numbers, 0.049); identical counts with
+  spread under 0.03 passes; spread over 0.03 fails even with identical
+  counts; non-identical item counts fails even with a zero spread; a
+  multi-menu gate takes the max spread across menus, not an average or
+  the first one.
+- 5 integration-level assertions driving the real `cmd_run` end to end
+  with `--repeat 3` against the real `km-sushi-sashimi` golden set (using
+  the actual golden items as fake "predictions," one ingredient
+  deliberately dropped on alternating calls to produce a controlled,
+  non-zero F1 spread without ever changing item count): the mocked
+  pipeline was called exactly 3 times, not 1 (the bug this card fixes);
+  the report file's new Consistency section appears with the correct
+  repeat count in its own heading; the consistency gate row appears in
+  the main Gates table; the section names the actual menu.
+
+Zero Anthropic calls made, confirmed by asserting the mock's call count
+(3, all fake) rather than trusting an absence of errors; cost printed by
+the (mocked) run itself was $0.0000. Test report and usage-log artifacts
+removed after the check ran; `git status --porcelain` confirms nothing
+stray was left in the repo.
+
+### Manifest (files touched, this commit)
+
+- `evals/run_evals.py`: `ConsistencyRow`, `evaluate_consistency_gate`,
+  `cmd_run`'s repeat loop, `write_report`'s new optional parameter and
+  section. No other file needed a change; `--check`, `--all` without
+  `--repeat`, and `--menu` without `--repeat` are all unchanged in
+  behavior and output shape.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `shared/*`, `src/*`, `public/*`, `evals/menus/*/golden.json`
+  (no golden touched, this is a harness-only fix).
+
+### Patterns established
+
+- Fixing a documented-but-unimplemented flag is a good candidate for a
+  parameter that defaults to `None`/unused and returns `None` when unused,
+  so every existing call site and every previously-generated report stays
+  byte-for-byte unaffected. The fix should be additive to a working
+  system's default path, not a rewrite of it.
+- Verifying a zero-spend acceptance criterion by monkeypatching out the
+  one function that actually spends money, then asserting its call count,
+  is a repeatable pattern for this repo's harness-only cards: it proves
+  the real control flow (the loop actually loops N times, the real
+  `write_report` renders the real new section) without needing a live
+  API key or any risk of an accidental real call slipping through.
+
+### Done-when, walked item by item
+
+1. `--repeat N` actually performs N independent runs and aggregates item-
+   count consistency and ingredient F1 spread against the existing gate:
+   done, verified via the dry integration check (3 real loop iterations,
+   correct aggregation, correct report section), not just code review.
+2. Matches what the usage banner already claims: done, the banner's `--all
+   --repeat 3 # consistency runs` example now does exactly that (and
+   composes with `--menu` too, same loop, no special-casing needed).
+3. Zero spend: done, confirmed by asserting the mocked pipeline's call
+   count rather than trusting the absence of a spend, no real API key
+   used or needed.
+
+### Single next action
+
+None outstanding on this card. A future consistency-measurement task
+(task #12's own successor, if one gets scheduled) can now use `--repeat N
+--menu <slug>` or `--repeat N --all` directly instead of N manual
+invocations and hand aggregation.
