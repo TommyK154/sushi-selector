@@ -23,3 +23,10 @@ Thumbs.db
 *:Zone.Identifier
 CLAUDE.local.md
 .claude/settings.local.json
+
+# dev-claude-code cron/watcher automation (2026-08-10): local orchestration
+# tooling, not a project deliverable, same class as .claude/statusline.sh.
+.claude/dev-claude-watch.sh
+.claude/cron-watch.log
+.claude/.dev-claude-watch.lock
+.claude/.dev-claude-watch.last_id
