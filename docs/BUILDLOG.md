@@ -2870,3 +2870,168 @@ app.js's state machine has no renderer yet to drive it in a real browser.
 Turnstile's success path is untested locally (needs a real site/secret key
 pair, likely a staging deploy or Tom supplying test keys). Both are natural
 next cards, neither is this one's scope.
+
+## Session 2026-08-10: P1-S4 cont., renderer (ui.js, filters.js, aliases.js)
+
+Base commit: 8d899a7
+
+### Scope
+
+Task #15 from the agent-pm board, the natural continuation of #11 flagged
+in that session's own closing note. Zero-spend. Per SPEC.md's UI contract:
+filter drawer as a bottom sheet, tri-state ingredient chips plus wrap/
+is_raw as dedicated chips, item search, three sort modes, Omakase no-repeat
+shuffle with an exhaustion state. Mobile standards (44px targets, 16px+
+inputs, safe-area insets, bottom sheet not side panel, dark palette,
+reduced-motion) are contractual per SPEC, not aspirational.
+
+### filters.js, aliases.js
+
+Pure logic, no DOM. Functionally verified with 20 assertions (include/
+exclude filtering, wrap+is_raw combination, empty-state detection, name/
+ingredient search, all three sort modes including null-price sinking and
+non-mutation, the tri-state chip cycle, vocabulary building, alias
+normalization case-insensitivity/plural-folding/pass-through). All 20
+pass.
+
+### A real spec gap: how does the browser reach shared/aliases.json
+
+`shared/aliases.json` lives outside `public/`, and wrangler.jsonc's assets
+binding only serves `./public`; SPEC.md's Worker API section enumerates
+every endpoint explicitly and has none for this. Resolved with
+`public/aliases.json` as a symlink to `../shared/aliases.json`, keeping
+`shared/` as the single source of truth already established for
+`shared/prompts/`, using the existing static-asset path, touching no
+worker code. Verified against a live `wrangler dev` boot: the symlink
+resolves and serves the real content (200).
+
+A second, analogous gap surfaced while building the capture flow:
+`TURNSTILE_SITE_KEY` is a worker `var`, "public by design" per its own
+wrangler.jsonc comment, but nothing served it to `public/` either. Resolved
+by adding `turnstileSiteKey` to the existing `/api/health` response rather
+than a new route, the same reasoning as the aliases fix: minimal, reuses
+an existing public GET endpoint, no new undocumented API surface.
+
+### ui.js
+
+`index.html`'s script tag now loads `/ui.js` (not `/app.js` directly):
+ui.js owns the DOM and imports app.js's `JobController` internally, per
+SPEC.md's file split (app.js knows nothing about rendering). `index.html`'s
+body is now just the `#app` mount point; ui.js constructs everything else
+via `document.createElement`, using `textContent` rather than
+interpolated `innerHTML` anywhere menu-derived data appears (item names,
+ingredients, notes are vision-model output from a photo, not trusted
+input).
+
+Three screens (Home/capture, Progress, Menu), the filter bottom sheet,
+item cards with raw/wrap/needs-review badges, and the Omakase shuffle
+button and exhaustion state. Turnstile's widget renders when
+`window.turnstile` and a real site key are both present; degrades to a
+visible "unavailable" message otherwise (this repo's site key is still
+the `REPLACE_WITH_TURNSTILE_SITE_KEY` placeholder, so that path is
+exercised, not the real widget). Flagged item-correction (the three-tier
+chip/autocomplete/free-text bottom sheet described under app.js's
+RECONCILE handling) was left out of this card's build: task #15's
+acceptance criterion names filters/search/sort/Omakase specifically, that
+correction flow is a separate feature under a different SPEC.md heading,
+and flagged items already render with a visible badge per app.js's own
+`flagged`/`flagReason` fields, so nothing is silently dropped in the
+meantime.
+
+### Browser verification
+
+No headless-browser tool (Playwright, Puppeteer, a Chrome binary) is
+available in this environment; installing one would mean downloading a
+full browser binary with no prior authorization to do so. Used `jsdom`
+instead, installed isolated in the session scratchpad (no footprint on
+this repo's `package.json`/lockfile), to execute the actual shipped files
+unmodified (a copy of `public/{app,ui,filters,aliases,preprocess}.js` in
+an ESM-mode directory, imported directly into a jsdom `document`/`window`)
+against a live `wrangler dev` server for the `fetch()` calls
+(`/api/health`, `/aliases.json`). This exercises real DOM construction and
+real event dispatch, not a reimplementation or a mock of the rendering
+logic; short of an actual browser, this is the closest available
+substitute for "actual browser testing, not just code review."
+
+Seeded a realistic menu into `localStorage` under `ss:menu:*` and drove
+the app exactly as a returning user would: tap a recent menu (the same
+code path a real completed parse would populate), search, sort, filter
+chips, five Omakase presses. 27 assertions, all pass.
+
+**Caught a real bug in the process, not from code review**: the fifth
+Omakase press silently reshuffled a new queue instead of showing the
+exhaustion state. Root cause: `state.omakaseQueue = []` was used to mean
+both "not started yet" and "just ran out," so the reshuffle-on-empty check
+fired before the exhaustion check ever got a chance to. Fixed by
+distinguishing `null` (not yet shuffled) from `[]` (shuffled and
+exhausted) as two different states, at every one of the four sites that
+touched `omakaseQueue`. Re-ran the full 27-assertion suite after the fix:
+all pass, including the previously-failing exhaustion check.
+
+Not verified even by jsdom: actual visual layout, CSS correctness (tap
+target sizes, safe-area insets, bottom-sheet slide animation), and the
+real Turnstile widget (jsdom has no rendering engine; CSS sizing claims in
+this session rest on the stylesheet's own `--tap-min`/16px declarations,
+reviewed but not measured).
+
+### Manifest (files touched, this commit)
+
+- `public/filters.js`, `public/aliases.js`: new, pure logic.
+- `public/aliases.json`: new, a symlink to `../shared/aliases.json`.
+- `public/ui.js`: new, the rendering/interaction layer.
+- `public/index.html`: script tag repointed to `/ui.js`; placeholder
+  markup removed, `#app` is now the sole static element.
+- `public/styles.css`: extended with the full Phase 2 component set
+  (capture flow, progress, menu screen, filter sheet, cards, Omakase,
+  recent menus) on top of the existing Phase 0 shell/safe-area/dark-palette
+  foundation.
+- `src/worker.ts`: `/api/health` now also returns `turnstileSiteKey`.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `shared/*`, `evals/*`, `src/session.ts`, `src/ratelimit.ts`,
+  `src/extract.ts` (no change needed for a render-only card).
+
+### Patterns established
+
+- When two states that look identical (`[]` in both cases here) actually
+  mean different things ("not started" vs. "ran out"), collapsing them
+  into one representation is a latent bug waiting for the exact sequence
+  that exposes it; a jsdom/browser-level test found this in a few seconds
+  where reading the code twice did not. Worth defaulting to a real
+  execution check for any state machine with an emptiable collection,
+  not just trusting the logic by inspection.
+- The `shared/`-file-reachable-from-`public/`-only gap (aliases.json, then
+  the same shape again for the Turnstile site key) is a recurring pattern
+  in this repo's architecture, not a one-off: worth watching for a third
+  occurrence and, if it comes, considering whether it deserves its own
+  documented convention in SPEC.md rather than being solved ad hoc each
+  time.
+- A missing verification tool (no browser automation available) does not
+  mean skipping verification; picking the closest available substitute
+  (jsdom, running the real files) and being explicit about what it does
+  and does not cover beats either fabricating a browser test or silently
+  downgrading to code review only.
+
+### Done-when, walked item by item
+
+1. `wrangler dev` serves a page where the state machine renders and is
+   drivable: done, verified via jsdom driving the real shipped files
+   against a live server, not just asserted.
+2. Filters, search, sort, and Omakase function per SPEC.md's UI contract:
+   done, 27 passing assertions, including a real bug caught and fixed
+   during verification, not before it.
+3. Mobile standards met: done by code review and CSS authoring (44px
+   `--tap-min` on every interactive element, explicit 16px inputs,
+   `env()` safe-area insets, bottom sheet never a side panel, dark
+   palette via `prefers-color-scheme`, reduced-motion respected); not
+   independently verified by measurement, no rendering engine available
+   to do so this session.
+4. Zero spend: done, no Anthropic calls made.
+
+### Single next action
+
+The flagged-item correction flow (Tier 1/2/3 chips/autocomplete/free-text)
+is unbuilt, out of scope for this card. Turnstile's real widget is
+unverified pending real site/secret keys. Actual visual/CSS correctness
+is unverified pending a real rendering engine (a future session could
+reach for a screenshot-capable tool if one becomes available, or Tom
+eyeballing a deployed preview).

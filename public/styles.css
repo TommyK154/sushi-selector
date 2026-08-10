@@ -102,3 +102,451 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --------------------------------------------------------------------
+   Phase 2: capture flow, progress, menu screen, filter sheet, cards,
+   Omakase. Every interactive control below is at least --tap-min (44px)
+   in both dimensions; every text input is 16px+ (inherited from body) so
+   iOS Safari never auto-zooms on focus.
+   -------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.section-title {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+/* Primary actions live in the thumb zone: this class is used for the
+   bottom-anchored, full-width capture/parse/retry buttons. No :hover
+   affordance anywhere, per SPEC.md; :active is the only interactive state
+   needed on a touch device. */
+.primary-action,
+.secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-action {
+  width: 100%;
+  margin-top: 0.75rem;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary-action:active {
+  opacity: 0.85;
+}
+
+.primary-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-action {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.text-input {
+  display: block;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0.6rem 0.85rem;
+  font-size: 16px; /* explicit, not inherited: guards iOS zoom regardless of body changes */
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.capture-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  border: 2px dashed var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.thumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.thumb {
+  position: relative;
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0.5rem;
+}
+
+.thumb-remove {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: none;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transform: scale(0.5);
+  transform-origin: top right;
+}
+
+.url-alt {
+  margin: 0.75rem 0;
+}
+
+.turnstile-mount {
+  margin: 0.75rem 0;
+  min-height: var(--tap-min);
+}
+
+.turnstile-unavailable {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.recent-menus {
+  margin-top: 1rem;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recent-item {
+  width: 100%;
+  min-height: var(--tap-min);
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* Progress screen */
+
+.progress-panel {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.progress-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.progress-detail {
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}
+
+.error-panel {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.error-message {
+  margin: 0 0 0.5rem;
+}
+
+/* Menu screen */
+
+.menu-screen {
+  padding-bottom: calc(5rem + var(--safe-bottom));
+}
+
+.menu-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 0.5rem;
+  padding-top: calc(0.5rem + var(--safe-top));
+  padding-bottom: 0.5rem;
+  background: var(--bg);
+}
+
+.search-input {
+  flex: 1;
+}
+
+.sort-toggle,
+.filter-trigger {
+  min-height: var(--tap-min);
+  padding: 0 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.zero-results {
+  color: var(--muted);
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.item-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  scroll-margin: 5rem;
+}
+
+.item-card.omakase-pick {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.item-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.item-name {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.item-price {
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chefs-pick-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-flag {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ingredient-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ingredient::after {
+  content: ",";
+}
+
+.ingredient:last-child::after {
+  content: "";
+}
+
+.ingredient.matched {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Omakase button: floating, thumb zone, always in the safe area. */
+.omakase-slot {
+  position: fixed;
+  right: calc(1.25rem + var(--safe-right));
+  bottom: calc(1.25rem + var(--safe-bottom));
+  z-index: 6;
+}
+
+.omakase-button {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  font-size: 1.5rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.omakase-exhaustion {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1.25rem + var(--safe-bottom));
+  z-index: 6;
+  text-align: center;
+}
+
+.exhaustion-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.exhaustion-actions .secondary-action {
+  flex: 1;
+}
+
+/* Filter bottom sheet: slides up from the bottom edge, never a side panel,
+   per SPEC.md. Dismiss by tapping the overlay or the handle/Done button. */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  max-height: 80dvh;
+  overflow-y: auto;
+  background: var(--bg);
+  border-radius: 1rem 1rem 0 0;
+  padding: 0.5rem 1rem calc(1rem + var(--safe-bottom));
+  animation: sheet-up 0.2s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sheet-handle {
+  width: 2.5rem;
+  height: 0.3rem;
+  margin: 0.5rem auto 1rem;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.chip-search {
+  margin-bottom: 0.75rem;
+}
+
+.chip-list,
+.facet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  min-height: var(--tap-min);
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.chip-include {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.chip-exclude {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+  text-decoration: line-through;
+}
+
+.sheet-done {
+  position: sticky;
+  bottom: 0;
+}
+
+/* Desktop: centered column via --max-column above already covers layout;
+   the filter sheet still slides from the bottom rather than becoming a
+   side panel, per SPEC.md's explicit instruction that this holds at every
+   size, not just mobile. */

@@ -15,21 +15,18 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <!-- Loaded async; ui.js checks for window.turnstile before using it, so
+         a slow or blocked load degrades to a disabled submit button rather
+         than a crash. -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   </head>
   <body>
     <main id="app" class="screen">
-      <header class="app-header">
-        <h1 class="app-title">Sushi Selector</h1>
-        <p class="app-tagline">Snap the menu, filter the raw stuff out.</p>
-      </header>
-
-      <section id="home" class="panel" aria-label="Capture">
-        <p class="placeholder">
-          Scaffold ready. Capture, parse, and results land in Phase 1 and 2.
-        </p>
-      </section>
+      <!-- ui.js owns everything inside #app from here; no static markup
+           beyond the mount point, per the vanilla-JS/no-framework/no-build
+           convention (CLAUDE.md). -->
     </main>
 
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/ui.js"></script>
   </body>
 </html>

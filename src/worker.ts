@@ -322,7 +322,16 @@ export default {
     }
 
     if (url.pathname === "/api/health" && request.method === "GET") {
-      return json({ status: "ok", model: env.MODEL }, 200, cors);
+      // turnstileSiteKey rides on the existing health check rather than a
+      // new route: it is public by design (per wrangler.jsonc's own
+      // comment on the var), and the capture screen needs it to render the
+      // Turnstile widget, but nothing served this value to public/ before
+      // now (analogous to the aliases.json gap this same task resolved).
+      return json(
+        { status: "ok", model: env.MODEL, turnstileSiteKey: env.TURNSTILE_SITE_KEY },
+        200,
+        cors,
+      );
     }
 
     // Reserved for post-MVP KV share links; documented and 404ing per SPEC.
