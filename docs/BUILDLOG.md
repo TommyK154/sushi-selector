@@ -2574,3 +2574,142 @@ out of scope for this card. A future card would decide what, if anything,
 to do about the FAIL rows (prompt iteration, golden review, or a scoped
 investigation of km-sushi-dinner specifically), starting from this session's
 baseline report as the reference point.
+
+## Session 2026-08-10: P1-SD, prompt iteration round 5, blocked
+
+Base commit: 97b6aeb
+
+### Scope
+
+Task #10 from the agent-pm board. Spend session, up to $1 authorized
+directly by Tom. Diagnose the baseline per-menu before editing anything;
+targets in priority order: precision (over-splitting), price (carry-down),
+ingredient F1. One change-set per session.
+
+### Round 1: masa-sushi neta-splitting hypothesis, wrong, reverted
+
+Hypothesis: the report-tail lead's named example (Ebi, Tamago, Inari, Uzura
+appearing as extra predicted items) was a choice-set list without individual
+prices getting exploded into separate items. Drafted a `system.md` edit on
+this theory. Checked against `evals/menus/masa-sushi/golden.json` before
+spending: wrong. These are individually priced gold items (`n:48-51`,
+English `name`, `romaji: X` in `notes`), not a choice-set at all.
+
+Verification run anyway, to be sure: `uv run evals/run_evals.py --menu
+masa-sushi --timestamp 2026-08-10-p1-sd-masa-verify` ($0.1491). Item count
+unchanged (156/133, identical to baseline), targeted items still EXTRA.
+Confirms the edit had no effect, consistent with the wrong-premise finding.
+Edit reverted (`git checkout`), working tree clean.
+
+### Round 2: free diagnosis, 4 parallel subagents, zero spend
+
+Dispatched four read-only diagnostic subagents (Explore type) to bucket
+every EXTRA/MISSED item against `golden.json` for masa-sushi,
+km-sushi-dinner, km-sushi-special-rolls, km-sushi-noodles-kitchen. Findings,
+each independently cross-checked against golden data, not asserted from the
+report diffs alone:
+
+- masa-sushi (23/33 diff rows, 70%): the model correctly matches the
+  English-named gold item AND separately emits a duplicate under the bare
+  Japanese/romaji term for the same fish. Fixing this would mean the prompt
+  suppressing a second printed occurrence as not-a-new-item, but `system.md`
+  already states the opposite principle explicitly ("do not merge two
+  visually distinct printed items into one just because they sound similar;
+  that judgment belongs to the client-side dedupe step"). A design-level
+  question (prompt exception vs. client-side dedupe enhancement), escalated
+  to Tom as task #13 rather than patched unilaterally.
+- km-sushi-dinner (13/21 EXTRA, 62%): hallucinated generic roll names
+  (Dynamite, Dragon, Salmon Skin, Philadelphia, Eel Avocado) not on this
+  specific menu photo at all, several duplicated in long+short form. Already
+  task #2's territory, no new action.
+- km-sushi-special-rolls (26/52 rows, 50%): illegible/handwritten roll
+  names, model falls back to describing contents as the name; ingredients
+  themselves match gold roll-for-roll. Likely not prompt-fixable (a
+  photo-legibility limit, not a wording gap). Logged as task #14.
+- km-sushi-noodles-kitchen (13/28, 46%): under-application of the EXISTING
+  "Combo and choice-set items" section (ramen flavor-matrix explosion,
+  "Children's Combo" dropped in favor of its listed choices, tempura
+  components pulled out standalone). The one target that is in-scope,
+  prompt-fixable, and does not require a convention call.
+
+Oversight reviewed and directed round 3 at km-sushi-noodles-kitchen only.
+
+### Round 3: km-sushi-noodles-kitchen combo fix, inconclusive-to-negative
+
+Added one paragraph to `system.md`'s "Combo and choice-set items" section:
+a combo/multi-choice dish keeps exactly one entry regardless of how its
+choices are printed (never dropped in favor of only its listed choices,
+never split into per-modifier items).
+
+Verification: `uv run evals/run_evals.py --menu km-sushi-noodles-kitchen
+--timestamp 2026-08-10-p1-sd-noodles-verify` ($0.0419). Result: WORSE than
+baseline (recall 0.133 vs. 0.267, precision 0.080 vs. 0.190, items 25/15 vs.
+21/15), not better.
+
+Before concluding the edit caused it, ran a control: same menu, unedited
+prompt, `--timestamp 2026-08-10-p1-sd-noodles-control` ($0.0415). Result:
+0.333 recall, 0.179 precision, 28/15 items, notably better than both the
+edited run and the original baseline. Two runs of the identical unedited
+prompt on this one menu span 0.267 to 0.333 recall: real, substantial
+single-run variance, large enough to swallow whatever a small edit's true
+effect is. Per the gates-decide-not-vibes principle, could not certify the
+edit as an improvement (or, cleanly, as a regression) on n=1. Did not
+commit. Edit abandoned (`git stash` then `git stash drop`), working tree
+clean, verified via `git status --porcelain`.
+
+### Manifest (files touched, this commit)
+
+- `evals/reports/2026-08-10-p1-sd-masa-verify.md`: written by the harness
+  (round 1's verification run), kept as the record that the round-1
+  hypothesis was tested and found to have no effect.
+- `evals/reports/2026-08-10-p1-sd-noodles-verify.md`: written by the harness
+  (round 3's verification run), kept as the negative result.
+- `evals/reports/2026-08-10-p1-sd-noodles-control.md`: written by the
+  harness (round 3's control run), kept as the variance evidence.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `shared/prompts/*` (both edits reverted before this commit,
+  confirmed clean via `git status` and `git diff` before writing), `shared/
+  schema/*`, `shared/aliases.json`, `evals/menus/*/golden.json` (no golden
+  touched, confirmed by `git diff --name-only 97b6aeb HEAD --
+  'evals/menus/*/golden.json'` returning nothing), `src/*`, `public/*`.
+
+### Patterns established
+
+- A verification run's single-sample result is not sufficient evidence to
+  certify a prompt edit, positive or negative, when a same-menu control run
+  on the unedited prompt shows variance of comparable magnitude. Running the
+  control before concluding causation (rather than after, or not at all) is
+  the affordable way to catch this without a full `--repeat` measurement.
+- "The report-tail INFERRED leads" in a task's acceptance criteria can mean
+  a lead PROJECT-STATE.md derived from reading a report's tail, not a
+  literal tag in the repo. When the phrase does not resolve to a findable
+  artifact, asking rather than guessing at its referent (routed through
+  oversight here) avoided diagnosing against the wrong target.
+- New findings that fall outside a card's original scope (the km-sushi-
+  dinner alias-duplication lead, the masa-sushi dedup-architecture
+  collision) get logged as new tasks for Tom's decision, not folded
+  silently into the current change-set and not decided unilaterally, even
+  when the finding is well-evidenced.
+
+### Done-when, walked item by item
+
+1. Per-menu diagnosis confirming or revising the report-tail leads: done,
+   round 2, independently re-derived and cross-checked against
+   `golden.json` for all four worst-precision menus, not just asserted.
+2. A change-set lands with its eval receipt: NOT done. Two hypotheses
+   tried, both failed to demonstrate improvement, both correctly not
+   committed rather than shipped on hope.
+3. Gate deltas reported: done for both attempted edits, including the
+   negative/inconclusive round 3 result and the variance finding behind it.
+
+Task #10 marked `blocked` on the board (not `failed`): the diagnosis work
+was real and produced two new decision tasks (#13, #14) plus a finding that
+argues for reconsidering task #12's hold. Blocked pending either a
+`--repeat` consistency measurement or Tom's own call on unblocking it.
+
+### Single next action
+
+None outstanding on this card; task #10 is blocked pending task #12 or
+Tom's direction. A future round should not retry km-sushi-noodles-kitchen's
+combo fix as a single n=1 verification again without either a `--repeat`
+run or explicit acceptance of the noise floor found here.
