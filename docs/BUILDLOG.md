@@ -3555,3 +3555,98 @@ Task #10 stays blocked pending Tom/oversight's read of this data. If
 reopened, its next round should use `--repeat 3` on both the control and
 any edited-prompt run on km-sushi-noodles-kitchen specifically, given how
 far this menu's noise floor sits from the rest of the golden set.
+
+## Session 2026-08-10: first production deploy (task #26, oversight acting as conductor)
+
+Tom's direct ask: "get back to me when the MVP is available on the internet,"
+explicitly delegating the deploy path to oversight rather than walking it
+himself. This entry covers what was actually done, by whom, and what remains.
+
+### What shipped
+
+Discovered, ahead of building the CI pipeline, that most of DEPLOY.md's
+one-time setup already existed from earlier project work, not previously
+recorded here:
+
+- `npx wrangler whoami` showed an already-authenticated OAuth session
+  (account `Tkargul1@binghamton.edu's Account`, id
+  `1fb4a176a8e2785fc34f5ff5556dd951`), sufficient to deploy directly from
+  this machine without a fresh `wrangler login`.
+- `.dev.vars` already held real values for `ANTHROPIC_API_KEY`,
+  `TURNSTILE_SECRET_KEY`, and `SESSION_HMAC_SECRET` (key names confirmed
+  present via `grep -oE '^[A-Z_]+='`, values never read or echoed).
+
+Given that, and given the explicit delegation, oversight:
+
+1. Pushed all three existing secret values from `.dev.vars` to Cloudflare
+   Worker production secrets via `wrangler secret put NAME`, each piped
+   directly from the file (`grep '^NAME=' .dev.vars | cut -d= -f2- | tr -d
+   '"' | npx wrangler secret put NAME`) so no value was ever printed to a
+   terminal, log, or chat transcript. This implicitly created the Worker
+   (`sushi-selector` did not exist yet under this account).
+2. Ran `npx wrangler deploy` for real (not `--dry-run`) to learn the
+   account's actual workers.dev URL, since it cannot be known ahead of a
+   first deploy: `https://sushi-selector.tkargul1.workers.dev`.
+3. Updated `wrangler.jsonc`'s `ALLOWED_ORIGINS` from the placeholder
+   `http://localhost:8787` to `http://localhost:8787,https://sushi-selector.tkargul1.workers.dev`
+   (comma-separated, confirmed against `src/worker.ts`'s `allowedOrigins()`
+   parsing before editing, not assumed). Redeployed once more to publish
+   the corrected value.
+4. Ran a live smoke test against the deployed URL, same shape as DEPLOY.md's
+   post-deploy verification checklist:
+   - `GET /` -> 200, static site serves.
+   - `GET /api/health` -> 200, correct model name, and (expectedly)
+     reflects the still-placeholder Turnstile site key.
+   - `POST /api/extract/index` with no session -> 401, auth gate confirmed
+     live, not just in local dev.
+   - `POST /api/session` with a garbage Turnstile token -> `403
+     turnstile_failed`, confirming the auth path is wired end to end.
+
+### What is deliberately NOT done, and why
+
+`TURNSTILE_SITE_KEY` in `wrangler.jsonc` is still the literal placeholder
+string. This is a real value oversight does not have and will not
+fabricate: it is public by design (safe to state in chat or paste
+directly), but nobody has recorded it anywhere accessible to this session,
+even though the paired secret key already exists in `.dev.vars` (implying
+the Turnstile site itself was created at some point, just this one value
+was never captured). Until Tom supplies it, the deployed site's core
+"start a parse" flow cannot work: the frontend's Turnstile widget cannot
+even initialize with a placeholder site key, so no real user, including
+Tom on his phone, can get past the CAPTCHA gate to mint a session.
+Everything else observed above (static serving, health, auth gate) is
+confirmed genuinely working.
+
+Also not done: the GitHub Action CI pipeline (task #26's other half,
+`.github/workflows/deploy.yml`) and its two GitHub repo secrets
+(`CLOUDFLARE_API_TOKEN`, a fresh least-privilege token Tom must create in
+the Cloudflare dashboard since a personal OAuth session cannot be reused
+for CI; `CLOUDFLARE_ACCOUNT_ID`, not sensitive, already known:
+`1fb4a176a8e2785fc34f5ff5556dd951`). This does not block the MVP being
+live right now, deployed directly from this machine; it only blocks
+*future* pushes to `main` from auto-deploying. Explicitly out of scope for
+oversight to attempt unilaterally: generating a new Cloudflare API token
+or a GitHub repo secret both require Tom's own dashboard/website session,
+not something achievable via the existing wrangler OAuth credential or any
+tool available to this session.
+
+### Manifest (files touched, this commit)
+
+- `wrangler.jsonc`: `ALLOWED_ORIGINS` updated with the real production
+  origin; explanatory comment updated; `TURNSTILE_SITE_KEY` deliberately
+  left as a placeholder with a comment explaining why.
+- `docs/BUILDLOG.md`: this entry.
+- Not touched: `shared/*`, `src/*`, `public/*`,
+  `evals/menus/*/golden.json`. No prompt, schema, or golden changed.
+- Cloudflare-side (not in git): three production secrets created;
+  `sushi-selector` Worker created and deployed (version id
+  `a9ab6e74-9e32-4dd7-96fb-e2f34c597269` as of this entry).
+
+### Single next action
+
+Blocking a genuinely usable MVP: Tom supplies the real Turnstile site key
+(Cloudflare dashboard, Turnstile, the existing site the secret key already
+belongs to) so `wrangler.jsonc` can be corrected and redeployed. Blocking
+future auto-deploys only, not urgent: Tom creates a scoped Cloudflare API
+token and adds it plus the account id as GitHub repo secrets, then task
+#26's `deploy.yml` half can be built and wired in.

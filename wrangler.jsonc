@@ -34,12 +34,16 @@
 
   // Non-secret config. Secrets (ANTHROPIC_API_KEY, TURNSTILE_SECRET_KEY,
   // SESSION_HMAC_SECRET) live in wrangler secrets / .dev.vars, never here.
-  // TURNSTILE_SITE_KEY is public by design; ALLOWED_ORIGINS gains the
-  // workers.dev production origin after the first deploy.
+  // TURNSTILE_SITE_KEY is public by design but still a real placeholder
+  // below: the real value has not been supplied yet (2026-08-10), tracked
+  // on task #26. Until it lands, POST /api/session will fail Turnstile
+  // verification in production; everything else deploys and serves fine.
+  // ALLOWED_ORIGINS gained the real workers.dev production origin after
+  // the first deploy (2026-08-10), per this file's own prior comment.
   "vars": {
     "MODEL": "claude-haiku-4-5-20251001",
     "TURNSTILE_SITE_KEY": "REPLACE_WITH_TURNSTILE_SITE_KEY",
-    "ALLOWED_ORIGINS": "http://localhost:8787"
+    "ALLOWED_ORIGINS": "http://localhost:8787,https://sushi-selector.tkargul1.workers.dev"
   },
 
   // Structured log lines per Anthropic call (token usage, cache counters,
