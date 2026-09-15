@@ -147,7 +147,28 @@ function renderHome() {
   );
 
   const thumbList = el("div", { class: "thumb-list" });
-  renderThumbs(thumbList);
+  renderThumbs(thumbList, updateParseButtonState);
+
+  const parseButton = el("button", {
+    class: "primary-action",
+    type: "button",
+    onclick: () => startParse(urlInput.value.trim()),
+  });
+
+  // BUG FIXED 2026-09-15 (Tom's MVP test): disabled/label state used to be
+  // computed once at render time, then only ever recomputed inside
+  // urlInput's own "input" listener. Adding or removing photos never
+  // touched it at all, so the button stayed permanently disabled (and its
+  // label permanently said "Parse photos" with no count) for anyone who
+  // only ever used the photo picker, which is the app's PRIMARY flow. Real
+  // symptom Tom hit: button visibly present but never activates after a
+  // successful upload. Fix: one function, called from every place
+  // pendingFiles or the URL field changes, not just one of them.
+  function updateParseButtonState() {
+    const count = state.pendingFiles.length;
+    parseButton.textContent = `Parse ${count || ""} photo${count === 1 ? "" : "s"}`.trim();
+    parseButton.disabled = count === 0 && !urlInput.value.trim();
+  }
 
   const fileInput = el("input", {
     type: "file",
@@ -159,7 +180,8 @@ function renderHome() {
       const incoming = Array.from(e.target.files || []);
       const combined = [...state.pendingFiles, ...incoming].slice(0, 6);
       state.pendingFiles = combined;
-      renderThumbs(thumbList);
+      renderThumbs(thumbList, updateParseButtonState);
+      updateParseButtonState();
     },
   });
 
@@ -170,17 +192,8 @@ function renderHome() {
     placeholder: "Or paste a menu page URL",
     "aria-label": "Menu page URL",
   });
-
-  const parseButton = el("button", {
-    class: "primary-action",
-    type: "button",
-    text: `Parse ${state.pendingFiles.length || ""} photo${state.pendingFiles.length === 1 ? "" : "s"}`.trim(),
-    onclick: () => startParse(urlInput.value.trim()),
-  });
-  parseButton.disabled = state.pendingFiles.length === 0 && !urlInput.value;
-  urlInput.addEventListener("input", () => {
-    parseButton.disabled = state.pendingFiles.length === 0 && !urlInput.value.trim();
-  });
+  urlInput.addEventListener("input", updateParseButtonState);
+  updateParseButtonState();
 
   const turnstileMount = el("div", { id: "turnstile-container", class: "turnstile-mount" });
 
@@ -201,7 +214,10 @@ function renderHome() {
   return container;
 }
 
-function renderThumbs(thumbList) {
+// onChange: called after a removal, same reason as fileInput's own onchange
+// call site (see the bug note above updateParseButtonState) - removing the
+// last photo must re-disable the button too, not just adding ones enable it.
+function renderThumbs(thumbList, onChange) {
   clear(thumbList);
   state.pendingFiles.forEach((file, index) => {
     const url = URL.createObjectURL(file);
@@ -214,7 +230,8 @@ function renderThumbs(thumbList) {
         text: "×",
         onclick: () => {
           state.pendingFiles = state.pendingFiles.filter((_, i) => i !== index);
-          renderThumbs(thumbList);
+          renderThumbs(thumbList, onChange);
+          onChange?.();
         },
       }),
     ]);
