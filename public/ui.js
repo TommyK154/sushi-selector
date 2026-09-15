@@ -170,6 +170,18 @@ function renderHome() {
     parseButton.disabled = count === 0 && !urlInput.value.trim();
   }
 
+  const formatWarning = el("p", { class: "format-warning", role: "status" });
+
+  // Added 2026-09-15 alongside the PREPROCESS error-handling fix in app.js:
+  // reject known-undecodable formats at selection time, before they ever
+  // reach preprocessPhoto, with a message distinct from the generic
+  // "kitchen is slammed" error. HEIC/HEIF is the realistic case (an
+  // iPhone photo, depending on camera format settings). Best-effort, not
+  // a guarantee: file.type for HEIC is unreliable across browsers/OSes,
+  // so a mistyped or blank-type HEIC file still falls through to app.js's
+  // now-fixed timeout/error handling as the real safety net.
+  const UNSUPPORTED_TYPES = new Set(["image/heic", "image/heif"]);
+
   const fileInput = el("input", {
     type: "file",
     accept: "image/*",
@@ -178,10 +190,16 @@ function renderHome() {
     id: "photo-input",
     onchange: (e) => {
       const incoming = Array.from(e.target.files || []);
-      const combined = [...state.pendingFiles, ...incoming].slice(0, 6);
+      const unsupported = incoming.filter((f) => UNSUPPORTED_TYPES.has(f.type));
+      const usable = incoming.filter((f) => !UNSUPPORTED_TYPES.has(f.type));
+      formatWarning.textContent = unsupported.length
+        ? "This browser can't read HEIC/HEIF photos. Try a different photo or format."
+        : "";
+      const combined = [...state.pendingFiles, ...usable].slice(0, 6);
       state.pendingFiles = combined;
       renderThumbs(thumbList, updateParseButtonState);
       updateParseButtonState();
+      e.target.value = ""; // allow re-selecting the same filename after a warning
     },
   });
 
@@ -202,6 +220,7 @@ function renderHome() {
       el("label", { for: "photo-input", class: "capture-cta" }, "Take or choose photos"),
       fileInput,
       thumbList,
+      formatWarning,
       el("div", { class: "url-alt" }, [urlInput]),
       turnstileMount,
       parseButton,

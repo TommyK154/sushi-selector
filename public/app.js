@@ -23,11 +23,31 @@ const DETAILS_CONCURRENCY = 3;
 const RETRY_COUNT = 1;
 const FUZZY_MATCH_THRESHOLD = 85;
 const REQUEST_TIMEOUT_MS = 30_000;
+// Client-side resize/encode with no network I/O; should finish in low
+// single-digit seconds even on a slow phone. This is a hang backstop, not
+// a normal-case limit, per the bug note on JobController.start() below.
+const PREPROCESS_TIMEOUT_MS = 20_000;
 
 // --------------------------------------------------------------------------
 // fetch with one retry on 429/5xx/timeout, jittered backoff, per SPEC.md's
 // "the client owns orchestration state" rationale.
 // --------------------------------------------------------------------------
+
+// Races preprocessing against a timeout so a genuine hang (e.g.
+// canvas.toBlob never invoking its callback under mobile memory pressure,
+// see preprocess.js) surfaces as an error instead of freezing the UI
+// forever. Does not cancel in-flight canvas work (there's no
+// AbortController equivalent for canvas.toBlob); it only makes the
+// surrounding await settle so the caller's error handling can take over.
+function preprocessWithTimeout(files) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("preprocess_timeout")), PREPROCESS_TIMEOUT_MS);
+  });
+  return Promise.race([Promise.all(files.map((f) => preprocessPhoto(f))), timeout]).finally(() =>
+    clearTimeout(timer),
+  );
+}
 
 function jitteredDelay(attempt) {
   const base = 500 * (attempt + 1);
@@ -320,34 +340,48 @@ export class JobController {
 
   // files: File[] (1-6 photos). turnstileToken: obtained by the caller
   // (index.html's widget, not this module's concern) before calling start.
+  //
+  // BUG FIXED 2026-09-15 (Tom's MVP test, stuck on "Preparing photos"
+  // forever): the try/catch used to start at /api/session, AFTER
+  // preprocessing. Any failure during PREPROCESS (an undecodable photo,
+  // e.g. HEIC, or a genuine hang in canvas.toBlob under mobile memory
+  // pressure) propagated uncaught, so this.state never reached
+  // STATES.ERROR, and ui.js's already-correct, already-tested error
+  // screen never got a chance to render. The screen just froze with zero
+  // feedback. Fix: wrap the whole method, from PREPROCESS onward, in one
+  // try/catch, and add a timeout so a true hang (not just a fast
+  // rejection) also surfaces instead of hanging forever. this.job may
+  // still be null when PREPROCESS itself fails (it's only constructed
+  // after preprocessing succeeds), so the catch guards that assignment;
+  // _setState already null-guards this.job correctly on its own.
   async start(files, turnstileToken) {
     if (files.length < 1 || files.length > 6) {
       throw new Error("a parse job accepts 1 to 6 photos");
     }
 
-    this._setState(STATES.PREPROCESS);
-    const images = await Promise.all(files.map((f) => preprocessPhoto(f)));
-    this.photoImages = images;
-    const photoHashes = await Promise.all(images.map((img) => sha256Hex(img.data)));
-    const jobHash = await computeJobHash(photoHashes);
-
-    if (this.tryResume(jobHash)) return this.job;
-
-    this.job = {
-      jobHash,
-      photoHashes,
-      state: STATES.PREPROCESS,
-      updatedAt: Date.now(),
-      perPhotoIndex: images.map(() => null),
-      perPhotoDetails: images.map(() => []),
-      perPhotoRetried: images.map(() => []),
-      items: null,
-      restaurantName: null,
-      error: null,
-    };
-    saveJob(this.job);
-
     try {
+      this._setState(STATES.PREPROCESS);
+      const images = await preprocessWithTimeout(files);
+      this.photoImages = images;
+      const photoHashes = await Promise.all(images.map((img) => sha256Hex(img.data)));
+      const jobHash = await computeJobHash(photoHashes);
+
+      if (this.tryResume(jobHash)) return this.job;
+
+      this.job = {
+        jobHash,
+        photoHashes,
+        state: STATES.PREPROCESS,
+        updatedAt: Date.now(),
+        perPhotoIndex: images.map(() => null),
+        perPhotoDetails: images.map(() => []),
+        perPhotoRetried: images.map(() => []),
+        items: null,
+        restaurantName: null,
+        error: null,
+      };
+      saveJob(this.job);
+
       const { sessionToken } = await postJson("/api/session", { turnstileToken });
 
       this._setState(STATES.INDEX);
@@ -379,7 +413,9 @@ export class JobController {
       this._setState(STATES.READY);
       return this.job;
     } catch (err) {
-      this.job.error = String(err && err.message ? err.message : err);
+      if (this.job) {
+        this.job.error = String(err && err.message ? err.message : err);
+      }
       this._setState(STATES.ERROR);
       throw err;
     }
