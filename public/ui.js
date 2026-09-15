@@ -153,7 +153,6 @@ function renderHome() {
     type: "file",
     accept: "image/*",
     multiple: "multiple",
-    capture: "environment",
     class: "sr-only",
     id: "photo-input",
     onchange: (e) => {
